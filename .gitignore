@@ -1,0 +1,93 @@
+# =========================================================================
+# GENERAL
+# =========================================================================
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS-generated files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+
+# =========================================================================
+# NODE & DEPENDENCIES
+# =========================================================================
+# The node_modules directory is where all your project's dependencies are installed.
+# This folder can be huge and should never be committed.
+# Anyone who clones the repo can regenerate it by running `npm install`.
+
+node_modules/
+dist/
+build/
+coverage/
+.npm
+.pnp.*
+
+# =========================================================================
+# SENSITIVE INFORMATION & ENVIRONMENT VARIABLES
+# =========================================================================
+# This is the most critical section for security.
+# Your .env files contain database connection strings, API keys, and other secrets.
+# Always include a .env.example file in your repo to show what variables are needed.
+
+.env
+.env.*
+!.env.example
+!.env.test
+
+# =========================================================================
+# IDE & EDITOR CONFIGURATION
+# =========================================================================
+# These files are specific to a developer's local editor setup and
+# don't need to be shared with the team.
+
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =========================================================================
+# REACT (Create React App specific)
+# =========================================================================
+# If you use Create React App, it generates a production `build` folder
+# which should not be committed.
+
+# This might be in your root or in a /client folder
+client/build/
+frontend/build/
+
+# =========================================================================
+# POSTGRESQL / DATABASE
+# =========================================================================
+# Local database dumps or credentials that should not be committed.
+
+*.sql
+*.dump
+
+# =========================================================================
+# OPTIONAL: TYPESCRIPT
+# =========================================================================
+# If you decide to use TypeScript, add these lines to ignore compiled JS files.
+
+*.js
+*.js.map
