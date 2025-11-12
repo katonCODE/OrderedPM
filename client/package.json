@@ -2,6 +2,7 @@
   "name": "client",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@8.15.0",
   "proxy": "http://localhost:5000",
   "dependencies": {
     "@supabase/supabase-js": "^2.81.1",
