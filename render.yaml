@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: orderedpm-backend
+    rootDir: server
+    env: node
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: PORT
+        value: 10000
+
