@@ -1,10 +1,9 @@
 services:
   - type: web
     name: orderedpm-backend
-    rootDir: server
     env: node
-    buildCommand: npm install
-    startCommand: node index.js
+    buildCommand: cd server && npm install
+    startCommand: cd server && node index.js
     envVars:
       - key: DATABASE_URL
         sync: false
