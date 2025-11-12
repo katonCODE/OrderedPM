@@ -82,12 +82,14 @@ frontend/build/
 # Local database dumps or credentials that should not be committed.
 
 *.sql
+!server/db/schema.sql
 *.dump
 
 # =========================================================================
 # OPTIONAL: TYPESCRIPT
 # =========================================================================
 # If you decide to use TypeScript, add these lines to ignore compiled JS files.
-
-*.js
-*.js.map
+# Note: Removed *.js and *.js.map since this project uses JavaScript directly
+# If you add TypeScript later, uncomment these lines:
+# *.js
+# *.js.map
