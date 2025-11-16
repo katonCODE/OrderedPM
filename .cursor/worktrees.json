@@ -1,5 +1,13 @@
 {
   "setup-worktree": [
-    "pnpm install"
+    "pnpm install",
+    "cd client && pnpm install",
+    "cd ../server && pnpm install",
+    "echo 'Worktree setup complete. Remember to:'",
+    "echo '1. Copy .env files from main worktree to this worktree (client/.env and server/.env)'",
+    "echo '2. Start dev servers from THIS worktree directory, not main'",
+    "echo '3. Run: cd client && pnpm start (Terminal 1)'",
+    "echo '4. Run: cd server && pnpm run dev (Terminal 2)'"
   ]
 }
+

@@ -8,22 +8,37 @@ function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
       if (isSignUp) {
-        await authService.signUp(email, password);
+        const data = await authService.signUp(email, password);
+        setError('');
+        if (data.session) {
+          onLogin();
+        } else {
+          setSuccess('Account created! Please check your email to confirm your account.');
+        }
       } else {
         await authService.signIn(email, password);
+        onLogin();
       }
-      onLogin();
     } catch (err) {
-      setError(err.message || 'Authentication failed');
+      const errorMessage = err.message || 'Authentication failed';
+      if (errorMessage.toLowerCase().includes('email not confirmed') || 
+          errorMessage.toLowerCase().includes('email_not_confirmed') ||
+          errorMessage.toLowerCase().includes('confirm your email')) {
+        setError('Please confirm your email address before signing in. Check your inbox for the confirmation link, or use the resend option if needed.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -61,6 +76,7 @@ function Login({ onLogin }) {
             />
           </div>
 
+          {success && <div className="success-message">{success}</div>}
           {error && <div className="error-message">{error}</div>}
 
           <button type="submit" disabled={loading} className="btn-primary">
@@ -75,6 +91,7 @@ function Login({ onLogin }) {
             onClick={() => {
               setIsSignUp(!isSignUp);
               setError('');
+              setSuccess('');
             }}
             className="link-button"
           >

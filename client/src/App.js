@@ -5,19 +5,23 @@ import { authService } from './services/auth';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ProjectDetail from './components/ProjectDetail';
+import EmailConfirmation from './components/EmailConfirmation';
 import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [emailConfirmed, setEmailConfirmed] = useState(true);
 
   useEffect(() => {
     checkAuth();
     const authStateChange = authService.onAuthStateChange((event, session) => {
       if (session) {
         setUser(session.user);
+        setEmailConfirmed(!!session.user?.email_confirmed_at);
       } else {
         setUser(null);
+        setEmailConfirmed(true);
       }
     });
 
@@ -32,7 +36,8 @@ function App() {
     try {
       const session = await authService.getSession();
       if (session) {
-        setUser({ id: 'user' });
+        setUser(session.user);
+        setEmailConfirmed(!!session.user?.email_confirmed_at);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
@@ -42,7 +47,7 @@ function App() {
   };
 
   const handleLogin = () => {
-    setUser({ id: 'user' });
+    checkAuth();
   };
 
   const handleLogout = async () => {
@@ -73,7 +78,11 @@ function App() {
             path="/"
             element={
               user ? (
-                <Dashboard onLogout={handleLogout} />
+                emailConfirmed ? (
+                  <Dashboard onLogout={handleLogout} />
+                ) : (
+                  <EmailConfirmation />
+                )
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -83,7 +92,11 @@ function App() {
             path="/project/:id"
             element={
               user ? (
-                <ProjectDetail />
+                emailConfirmed ? (
+                  <ProjectDetail />
+                ) : (
+                  <EmailConfirmation />
+                )
               ) : (
                 <Navigate to="/login" replace />
               )

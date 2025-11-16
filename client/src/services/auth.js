@@ -63,6 +63,17 @@ export const authService = {
     return null;
   },
 
+  resendConfirmationEmail: async (email) => {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+    if (error) throw error;
+  },
+
   onAuthStateChange: (callback) => {
     if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
     return supabase.auth.onAuthStateChange(callback);
