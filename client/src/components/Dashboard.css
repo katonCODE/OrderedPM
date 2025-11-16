@@ -1,11 +1,11 @@
 /* client/src/components/Dashboard.css */
 .dashboard {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #1a1a1a;
 }
 
 .dashboard-header {
-  background: white;
+  background: #252525;
   padding: 20px 40px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: flex;
@@ -15,7 +15,7 @@
 
 .dashboard-header h1 {
   margin: 0;
-  color: #667eea;
+  color: #4a9eff;
   font-size: 28px;
 }
 
@@ -34,13 +34,13 @@
 
 .dashboard-actions h2 {
   margin: 0;
-  color: #333;
+  color: #e0e0e0;
   font-size: 24px;
 }
 
 .error-banner {
-  background: #fee;
-  color: #c33;
+  background: #3d1f1f;
+  color: #ff6b6b;
   padding: 15px;
   border-radius: 8px;
   margin-bottom: 20px;
@@ -49,7 +49,7 @@
 .loading {
   text-align: center;
   padding: 40px;
-  color: #666;
+  color: #b0b0b0;
   font-size: 18px;
 }
 
@@ -66,12 +66,12 @@
 }
 
 .btn-primary:hover {
-  background: #5568d3;
+  background: #3a8eef;
 }
 
 .btn-secondary {
   padding: 10px 20px;
-  background: #6c757d;
+  background: #404040;
   color: white;
   border: none;
   border-radius: 8px;
@@ -82,7 +82,7 @@
 }
 
 .btn-secondary:hover {
-  background: #5a6268;
+  background: #505050;
 }
 
 @media (max-width: 768px) {

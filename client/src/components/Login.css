@@ -4,29 +4,30 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
   padding: 20px;
 }
 
 .login-card {
-  background: white;
+  background: #252525;
   border-radius: 12px;
   padding: 40px;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid #404040;
 }
 
 .login-card h1 {
   margin: 0 0 10px 0;
-  color: #667eea;
+  color: #4a9eff;
   font-size: 32px;
   text-align: center;
 }
 
 .login-card h2 {
   margin: 0 0 30px 0;
-  color: #333;
+  color: #e0e0e0;
   font-size: 24px;
   text-align: center;
   font-weight: 600;
@@ -39,38 +40,45 @@
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #555;
+  color: #b0b0b0;
   font-weight: 500;
 }
 
 .form-group input {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #404040;
   border-radius: 8px;
   font-size: 16px;
   transition: border-color 0.3s;
   box-sizing: border-box;
+  background: #1a1a1a;
+  color: #e0e0e0;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #4a9eff;
+}
+
+.form-group input::placeholder {
+  color: #666;
 }
 
 .error-message {
-  background: #fee;
-  color: #c33;
+  background: #3d1f1f;
+  color: #ff6b6b;
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 20px;
   font-size: 14px;
+  border: 1px solid #5a2a2a;
 }
 
 .btn-primary {
   width: 100%;
   padding: 12px;
-  background: #667eea;
+  background: #4a9eff;
   color: white;
   border: none;
   border-radius: 8px;
@@ -81,7 +89,7 @@
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #5568d3;
+  background: #3a8eef;
 }
 
 .btn-primary:disabled {
@@ -92,13 +100,13 @@
 .toggle-auth {
   text-align: center;
   margin-top: 20px;
-  color: #666;
+  color: #b0b0b0;
 }
 
 .link-button {
   background: none;
   border: none;
-  color: #667eea;
+  color: #4a9eff;
   cursor: pointer;
   text-decoration: underline;
   font-size: inherit;
@@ -106,6 +114,5 @@
 }
 
 .link-button:hover {
-  color: #5568d3;
+  color: #3a8eef;
 }
-
