@@ -1,5 +1,5 @@
 // client/src/App.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/auth';
 import Login from './components/Login';
@@ -12,10 +12,13 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [emailConfirmed, setEmailConfirmed] = useState(true);
+  const initialCheckComplete = useRef(false);
 
   useEffect(() => {
     checkAuth();
     const authStateChange = authService.onAuthStateChange((event, session) => {
+      if (!initialCheckComplete.current) return;
+      
       if (session) {
         setUser(session.user);
         setEmailConfirmed(!!session.user?.email_confirmed_at);
@@ -34,20 +37,32 @@ function App() {
 
   const checkAuth = async () => {
     try {
-      const session = await authService.getSession();
-      if (session) {
-        setUser(session.user);
-        setEmailConfirmed(!!session.user?.email_confirmed_at);
+      const token = localStorage.getItem('token');
+      if (token) {
+        const session = await authService.getSession();
+        if (session) {
+          setUser(session.user);
+          setEmailConfirmed(!!session.user?.email_confirmed_at);
+        } else {
+          setUser(null);
+          setEmailConfirmed(true);
+        }
+      } else {
+        setUser(null);
+        setEmailConfirmed(true);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
+      setUser(null);
+      setEmailConfirmed(true);
     } finally {
       setLoading(false);
+      initialCheckComplete.current = true;
     }
   };
 
-  const handleLogin = () => {
-    checkAuth();
+  const handleLogin = async () => {
+    await checkAuth();
   };
 
   const handleLogout = async () => {

@@ -12,6 +12,44 @@ const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+const getSupabaseAuthKey = () => {
+  if (!supabaseUrl) return null;
+  const urlParts = supabaseUrl.split('//')[1]?.split('.')[0];
+  if (urlParts) {
+    return `sb-${urlParts}-auth-token`;
+  }
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+      return key;
+    }
+  }
+  return null;
+};
+
+const syncToken = (accessToken) => {
+  if (!accessToken) return;
+  
+  // Store in our token key for backward compatibility
+  localStorage.setItem('token', accessToken);
+  
+  // Also sync to Supabase's format if Supabase is configured
+  if (supabase) {
+    const supabaseKey = getSupabaseAuthKey();
+    if (supabaseKey) {
+      try {
+        const existingData = localStorage.getItem(supabaseKey);
+        let authData = existingData ? JSON.parse(existingData) : {};
+        authData.access_token = accessToken;
+        localStorage.setItem(supabaseKey, JSON.stringify(authData));
+      } catch (e) {
+        // If parsing fails, create new structure
+        localStorage.setItem(supabaseKey, JSON.stringify({ access_token: accessToken }));
+      }
+    }
+  }
+};
+
 export const authService = {
   signUp: async (email, password) => {
     if (!supabase) {
@@ -23,7 +61,7 @@ export const authService = {
     });
     if (error) throw error;
     if (data.session) {
-      localStorage.setItem('token', data.session.access_token);
+      syncToken(data.session.access_token);
     }
     return data;
   },
@@ -38,7 +76,7 @@ export const authService = {
     });
     if (error) throw error;
     if (data.session) {
-      localStorage.setItem('token', data.session.access_token);
+      syncToken(data.session.access_token);
     }
     return data;
   },
@@ -48,6 +86,11 @@ export const authService = {
       await supabase.auth.signOut();
     }
     localStorage.removeItem('token');
+    // Also clear Supabase auth token
+    const supabaseKey = getSupabaseAuthKey();
+    if (supabaseKey) {
+      localStorage.removeItem(supabaseKey);
+    }
   },
 
   getSession: async () => {
@@ -55,11 +98,26 @@ export const authService = {
       const token = localStorage.getItem('token');
       return token ? { access_token: token } : null;
     }
-    const { data } = await supabase.auth.getSession();
+    
+    const token = localStorage.getItem('token');
+    let { data } = await supabase.auth.getSession();
+    
     if (data.session) {
-      localStorage.setItem('token', data.session.access_token);
+      syncToken(data.session.access_token);
       return data.session;
     }
+    
+    if (token) {
+      for (let i = 0; i < 3; i++) {
+        await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+        const retryData = await supabase.auth.getSession();
+        if (retryData.data.session) {
+          syncToken(retryData.data.session.access_token);
+          return retryData.data.session;
+        }
+      }
+    }
+    
     return null;
   },
 
@@ -72,6 +130,17 @@ export const authService = {
       email,
     });
     if (error) throw error;
+  },
+
+  refreshSession: async () => {
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) throw error;
+    if (data.session) {
+      syncToken(data.session.access_token);
+      return data.session;
+    }
+    throw new Error('No session available to refresh');
   },
 
   onAuthStateChange: (callback) => {
