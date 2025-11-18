@@ -86,6 +86,14 @@ frontend/build/
 *.dump
 
 # =========================================================================
+# GIT WORKTREES
+# =========================================================================
+# Git worktree directories - these are separate working directories
+# for different branches and should not be committed
+*-worktree/
+worktrees/
+
+# =========================================================================
 # OPTIONAL: TYPESCRIPT
 # =========================================================================
 # If you decide to use TypeScript, add these lines to ignore compiled JS files.
