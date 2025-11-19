@@ -51,7 +51,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Create a new task
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { project_id, title, description, status } = req.body;
+    const { project_id, title, description, status, due_date, priority } = req.body;
 
     if (!project_id) {
       return res.status(400).json({ error: 'Project ID is required' });
@@ -75,14 +75,19 @@ router.post('/', authenticateToken, async (req, res) => {
       ? status 
       : 'todo';
 
+    const validPriority = priority && ['low', 'medium', 'high'].includes(priority)
+      ? priority
+      : 'medium';
+
     const result = await pool.query(
-      'INSERT INTO tasks (project_id, user_id, title, description, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [project_id, req.userId, title.trim(), description?.trim() || null, validStatus]
+      'INSERT INTO tasks (project_id, user_id, title, description, status, due_date, priority) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [project_id, req.userId, title.trim(), description?.trim() || null, validStatus, due_date || null, validPriority]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating task:', error);
+    console.error('Error details:', error.message, error.stack);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -90,28 +95,93 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update a task
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    const { title, description, status } = req.body;
+    console.log('Received Update Payload:', req.body);
 
-    if (!title || title.trim() === '') {
-      return res.status(400).json({ error: 'Task title is required' });
-    }
-
-    const validStatus = status && ['todo', 'in_progress', 'done'].includes(status) 
-      ? status 
-      : 'todo';
-
-    const result = await pool.query(
-      'UPDATE tasks SET title = $1, description = $2, status = $3, updated_at = NOW() WHERE id = $4 AND user_id = $5 RETURNING *',
-      [title.trim(), description?.trim() || null, validStatus, req.params.id, req.userId]
+    // Verify task exists and belongs to user
+    const existingTask = await pool.query(
+      'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
     );
 
-    if (result.rows.length === 0) {
+    if (existingTask.rows.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
+
+    const { title, description, status, due_date, priority } = req.body;
+
+    // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
+    let updatedTitle = null;
+    let updatedDescription = null;
+    let updatedStatus = null;
+    let updatedDueDate = null;
+    let updatedPriority = null;
+
+    if (title !== undefined) {
+      const trimmedTitle = title.trim();
+      if (!trimmedTitle) {
+        return res.status(400).json({ error: 'Task title cannot be empty' });
+      }
+      updatedTitle = trimmedTitle;
+    }
+
+    if (description !== undefined) {
+      updatedDescription = description?.trim() || null;
+    }
+
+    if (status !== undefined) {
+      if (['todo', 'in_progress', 'done'].includes(status)) {
+        updatedStatus = status;
+      } else {
+        return res.status(400).json({ error: 'Invalid status value' });
+      }
+    }
+
+    if (due_date !== undefined) {
+      updatedDueDate = due_date || null;
+    }
+
+    if (priority !== undefined) {
+      if (['low', 'medium', 'high'].includes(priority)) {
+        updatedPriority = priority;
+      } else {
+        return res.status(400).json({ error: 'Invalid priority value. Must be low, medium, or high' });
+      }
+    }
+
+    const queryText = `
+      UPDATE tasks 
+      SET 
+        title = COALESCE($1, title),
+        description = COALESCE($2, description),
+        status = COALESCE($3, status),
+        due_date = COALESCE($4, due_date),
+        priority = COALESCE($5, priority),
+        updated_at = NOW()
+      WHERE id = $6 AND user_id = $7
+      RETURNING *
+    `;
+
+    const values = [
+      updatedTitle,
+      updatedDescription,
+      updatedStatus,
+      updatedDueDate,
+      updatedPriority,
+      req.params.id,
+      req.userId
+    ];
+
+    console.log('Executing SQL:', queryText.trim());
+    console.log('With Values:', values);
+
+    const result = await pool.query(queryText, values);
+
+    console.log('Update Result:', result.rows[0]);
 
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating task:', error);
+    console.error('Error details:', error.message, error.stack);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

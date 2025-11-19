@@ -93,6 +93,39 @@
   font-size: 12px;
 }
 
+.task-due-date {
+  color: #808080;
+  font-size: 12px;
+}
+
+.priority-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.priority-high {
+  background: #3d1f1f;
+  color: #ff6b6b;
+  border: 1px solid #5a2f2f;
+}
+
+.priority-medium {
+  background: #3d3a2b;
+  color: #ffda6a;
+  border: 1px solid #5a5a3f;
+}
+
+.priority-low {
+  background: #2b3d2b;
+  color: #7aff7a;
+  border: 1px solid #3a5a3a;
+}
+
 .task-actions {
   display: flex;
   gap: 10px;

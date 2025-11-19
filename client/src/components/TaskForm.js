@@ -6,6 +6,8 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('todo');
+  const [dueDate, setDueDate] = useState('');
+  const [priority, setPriority] = useState('medium');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -14,6 +16,15 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setTitle(task.title || '');
       setDescription(task.description || '');
       setStatus(task.status || 'todo');
+      setDueDate(task.due_date ? task.due_date.split('T')[0] : '');
+      setPriority(task.priority || 'medium');
+    } else {
+      // Reset form when creating a new task
+      setTitle('');
+      setDescription('');
+      setStatus('todo');
+      setDueDate('');
+      setPriority('medium');
     }
   }, [task]);
 
@@ -24,9 +35,9 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
 
     try {
       if (task) {
-        await onSubmit(task.id, { title, description, status });
+        await onSubmit(task.id, { title, description, status, due_date: dueDate || null, priority });
       } else {
-        await onSubmit({ project_id: projectId, title, description, status });
+        await onSubmit({ project_id: projectId, title, description, status, due_date: dueDate || null, priority });
       }
     } catch (err) {
       setError(err.message || 'Failed to save task');
@@ -75,6 +86,29 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
               <option value="todo">To Do</option>
               <option value="in_progress">In Progress</option>
               <option value="done">Done</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="task-due-date">Due Date</label>
+            <input
+              id="task-due-date"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="task-priority">Priority</label>
+            <select
+              id="task-priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
             </select>
           </div>
 

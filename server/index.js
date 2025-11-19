@@ -12,18 +12,19 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // In production, specify your frontend URL(s)
+    // Explicitly allow localhost:3000 for local development
     const allowedOrigins = [
-      process.env.FRONTEND_URL,
       'http://localhost:3000',
+      process.env.FRONTEND_URL,
       'http://localhost:3001',
       'https://orderedpm.onrender.com',
       // Add your deployed frontend URL here
     ].filter(Boolean);
     
-    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log(`CORS blocked origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },

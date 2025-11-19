@@ -14,6 +14,24 @@ function TaskList({ tasks, onEdit, onDelete, onStatusChange }) {
     }
   };
 
+  const getPriorityClass = (priority) => {
+    switch (priority) {
+      case 'high':
+        return 'priority-high';
+      case 'medium':
+        return 'priority-medium';
+      case 'low':
+        return 'priority-low';
+      default:
+        return 'priority-medium';
+    }
+  };
+
+  const formatPriority = (priority) => {
+    if (!priority) return 'Medium';
+    return priority.charAt(0).toUpperCase() + priority.slice(1);
+  };
+
   if (tasks.length === 0) {
     return (
       <div className="empty-state">
@@ -46,6 +64,16 @@ function TaskList({ tasks, onEdit, onDelete, onStatusChange }) {
               <span className="task-date">
                 Created {new Date(task.created_at).toLocaleDateString()}
               </span>
+              {task.due_date && (
+                <span className="task-due-date">
+                  Due {new Date(task.due_date).toLocaleDateString()}
+                </span>
+              )}
+              {task.priority && (
+                <span className={`priority-badge ${getPriorityClass(task.priority)}`}>
+                  {formatPriority(task.priority)}
+                </span>
+              )}
             </div>
           </div>
           <div className="task-actions">

@@ -68,6 +68,8 @@ function ProjectDetail() {
         title: task.title,
         description: task.description,
         status: newStatus,
+        due_date: task.due_date || null,
+        priority: task.priority || 'medium',
       });
     },
     onMutate: async ({ taskId, newStatus }) => {
