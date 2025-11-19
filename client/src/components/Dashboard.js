@@ -1,38 +1,27 @@
 // client/src/components/Dashboard.js
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI } from '../services/api';
 import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
+  const { data: projects = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsAPI.getAll(),
+  });
 
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await projectsAPI.getAll();
-      setProjects(data);
-      setError('');
-    } catch (err) {
-      setError(err.message || 'Failed to load projects');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const error = queryError?.message || '';
 
   const handleCreateProject = async (projectData) => {
     try {
       const newProject = await projectsAPI.create(projectData);
-      setProjects([newProject, ...projects]);
+      queryClient.setQueryData(['projects'], (old) => [newProject, ...(old || [])]);
       setShowForm(false);
     } catch (err) {
       throw err;
@@ -42,7 +31,9 @@ function Dashboard({ onLogout }) {
   const handleUpdateProject = async (id, projectData) => {
     try {
       const updatedProject = await projectsAPI.update(id, projectData);
-      setProjects(projects.map(p => p.id === id ? updatedProject : p));
+      queryClient.setQueryData(['projects'], (old) => 
+        (old || []).map(p => p.id === id ? updatedProject : p)
+      );
       setEditingProject(null);
     } catch (err) {
       throw err;
@@ -55,9 +46,9 @@ function Dashboard({ onLogout }) {
     }
     try {
       await projectsAPI.delete(id);
-      setProjects(projects.filter(p => p.id !== id));
+      queryClient.setQueryData(['projects'], (old) => (old || []).filter(p => p.id !== id));
     } catch (err) {
-      setError(err.message || 'Failed to delete project');
+      // Error will be handled by the UI if needed
     }
   };
 

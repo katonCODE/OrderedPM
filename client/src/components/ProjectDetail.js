@@ -1,6 +1,7 @@
 // client/src/components/ProjectDetail.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
 import TaskList from './TaskList';
 import TaskForm from './TaskForm';
@@ -9,44 +10,27 @@ import './ProjectDetail.css';
 function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [project, setProject] = useState(null);
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
-  const loadProject = useCallback(async () => {
-    try {
-      const data = await projectsAPI.getById(id);
-      setProject(data);
-    } catch (err) {
-      setError(err.message || 'Failed to load project');
-    }
-  }, [id]);
+  const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
+    queryKey: ['project', id],
+    queryFn: () => projectsAPI.getById(id),
+  });
 
-  const loadTasks = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await tasksAPI.getByProject(id);
-      setTasks(data);
-      setError('');
-    } catch (err) {
-      setError(err.message || 'Failed to load tasks');
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useQuery({
+    queryKey: ['tasks', id],
+    queryFn: () => tasksAPI.getByProject(id),
+  });
 
-  useEffect(() => {
-    loadProject();
-    loadTasks();
-  }, [loadProject, loadTasks]);
+  const loading = projectLoading || tasksLoading;
+  const error = projectError?.message || tasksError?.message || '';
 
   const handleCreateTask = async (taskData) => {
     try {
       const newTask = await tasksAPI.create(taskData);
-      setTasks([newTask, ...tasks]);
+      queryClient.setQueryData(['tasks', id], (old) => [newTask, ...(old || [])]);
       setShowForm(false);
     } catch (err) {
       throw err;
@@ -56,7 +40,9 @@ function ProjectDetail() {
   const handleUpdateTask = async (taskId, taskData) => {
     try {
       const updatedTask = await tasksAPI.update(taskId, taskData);
-      setTasks(tasks.map(t => t.id === taskId ? updatedTask : t));
+      queryClient.setQueryData(['tasks', id], (old) => 
+        (old || []).map(t => t.id === taskId ? updatedTask : t)
+      );
       setEditingTask(null);
       setShowForm(false);
     } catch (err) {
@@ -70,25 +56,47 @@ function ProjectDetail() {
     }
     try {
       await tasksAPI.delete(taskId);
-      setTasks(tasks.filter(t => t.id !== taskId));
+      queryClient.setQueryData(['tasks', id], (old) => (old || []).filter(t => t.id !== taskId));
     } catch (err) {
-      setError(err.message || 'Failed to delete task');
+      // Error will be handled by the UI if needed
     }
   };
 
-  const handleStatusChange = async (taskId, newStatus) => {
-    try {
-      const task = tasks.find(t => t.id === taskId);
+  const statusUpdateMutation = useMutation({
+    mutationFn: ({ taskId, newStatus, task }) => {
+      return tasksAPI.update(taskId, {
+        title: task.title,
+        description: task.description,
+        status: newStatus,
+      });
+    },
+    onMutate: async ({ taskId, newStatus }) => {
+      await queryClient.cancelQueries({ queryKey: ['tasks', id] });
+      const previousTasks = queryClient.getQueryData(['tasks', id]);
+      const task = previousTasks?.find(t => t.id === taskId);
+      
       if (task) {
-        const updatedTask = await tasksAPI.update(taskId, {
-          title: task.title,
-          description: task.description,
-          status: newStatus,
-        });
-        setTasks(tasks.map(t => t.id === taskId ? updatedTask : t));
+        queryClient.setQueryData(['tasks', id], (old) =>
+          (old || []).map(t => t.id === taskId ? { ...t, status: newStatus } : t)
+        );
       }
-    } catch (err) {
-      setError(err.message || 'Failed to update task status');
+      
+      return { previousTasks };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousTasks) {
+        queryClient.setQueryData(['tasks', id], context.previousTasks);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
+    },
+  });
+
+  const handleStatusChange = (taskId, newStatus) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      statusUpdateMutation.mutate({ taskId, newStatus, task });
     }
   };
 

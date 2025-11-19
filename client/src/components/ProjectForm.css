@@ -14,17 +14,18 @@
 }
 
 .form-card {
-  background: white;
+  background: #252525;
   border-radius: 12px;
   padding: 30px;
   width: 100%;
   max-width: 500px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid #404040;
 }
 
 .form-card h2 {
   margin: 0 0 25px 0;
-  color: #333;
+  color: #e0e0e0;
   font-size: 24px;
 }
 
@@ -35,7 +36,7 @@
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #555;
+  color: #b0b0b0;
   font-weight: 500;
 }
 
@@ -43,18 +44,20 @@
 .form-group textarea {
   width: 100%;
   padding: 12px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #404040;
   border-radius: 8px;
   font-size: 16px;
   font-family: inherit;
   transition: border-color 0.3s;
   box-sizing: border-box;
+  background: #1a1a1a;
+  color: #e0e0e0;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #4a9eff;
 }
 
 .form-group textarea {
@@ -62,8 +65,8 @@
 }
 
 .error-message {
-  background: #fee;
-  color: #c33;
+  background: #3d1f1f;
+  color: #ff6b6b;
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 20px;
@@ -78,7 +81,7 @@
 
 .btn-primary {
   padding: 10px 20px;
-  background: #667eea;
+  background: #4a9eff;
   color: white;
   border: none;
   border-radius: 8px;
@@ -89,7 +92,7 @@
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #5568d3;
+  background: #3a8eef;
 }
 
 .btn-primary:disabled {
@@ -99,7 +102,7 @@
 
 .btn-secondary {
   padding: 10px 20px;
-  background: #6c757d;
+  background: #404040;
   color: white;
   border: none;
   border-radius: 8px;
@@ -110,7 +113,7 @@
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #5a6268;
+  background: #505050;
 }
 
 .btn-secondary:disabled {

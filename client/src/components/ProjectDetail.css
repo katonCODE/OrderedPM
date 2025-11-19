@@ -1,11 +1,11 @@
 /* client/src/components/ProjectDetail.css */
 .project-detail {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #1a1a1a;
 }
 
 .project-detail-header {
-  background: white;
+  background: #252525;
   padding: 30px 40px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   margin-bottom: 30px;
@@ -14,7 +14,7 @@
 .btn-back {
   background: none;
   border: none;
-  color: #667eea;
+  color: #4a9eff;
   font-size: 16px;
   cursor: pointer;
   padding: 8px 0;
@@ -24,17 +24,18 @@
 
 .btn-back:hover {
   text-decoration: underline;
+  color: #3a8eef;
 }
 
 .project-info h1 {
   margin: 0 0 10px 0;
-  color: #333;
+  color: #4a9eff;
   font-size: 32px;
 }
 
 .project-description {
   margin: 0;
-  color: #666;
+  color: #b0b0b0;
   font-size: 16px;
   line-height: 1.6;
 }
@@ -54,13 +55,13 @@
 
 .project-actions h2 {
   margin: 0;
-  color: #333;
+  color: #e0e0e0;
   font-size: 24px;
 }
 
 .error-banner {
-  background: #fee;
-  color: #c33;
+  background: #3d1f1f;
+  color: #ff6b6b;
   padding: 15px;
   border-radius: 8px;
   margin-bottom: 20px;
@@ -69,7 +70,7 @@
 .loading {
   text-align: center;
   padding: 40px;
-  color: #666;
+  color: #b0b0b0;
   font-size: 18px;
 }
 
@@ -79,14 +80,14 @@
 }
 
 .error-container p {
-  color: #c33;
+  color: #ff6b6b;
   font-size: 18px;
   margin-bottom: 20px;
 }
 
 .btn-primary {
   padding: 10px 20px;
-  background: #667eea;
+  background: #4a9eff;
   color: white;
   border: none;
   border-radius: 8px;
@@ -97,7 +98,7 @@
 }
 
 .btn-primary:hover {
-  background: #5568d3;
+  background: #3a8eef;
 }
 
 @media (max-width: 768px) {

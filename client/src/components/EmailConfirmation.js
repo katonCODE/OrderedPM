@@ -95,7 +95,7 @@ function EmailConfirmation() {
           onClick={handleCheckStatus}
           disabled={loading}
           className="btn-primary"
-          style={{ background: '#666', marginBottom: '20px' }}
+          style={{ background: '#404040', marginBottom: '20px' }}
         >
           {loading ? 'Checking...' : 'Check Confirmation Status'}
         </button>

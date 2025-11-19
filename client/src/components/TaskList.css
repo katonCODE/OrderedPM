@@ -6,7 +6,7 @@
 }
 
 .task-card {
-  background: white;
+  background: #252525;
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -17,7 +17,7 @@
 }
 
 .task-card:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .task-content {
@@ -34,7 +34,7 @@
 
 .task-header h4 {
   margin: 0;
-  color: #333;
+  color: #e0e0e0;
   font-size: 18px;
   font-weight: 600;
   flex: 1;
@@ -42,40 +42,42 @@
 
 .status-select {
   padding: 6px 12px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid #404040;
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: border-color 0.2s;
+  background: #1a1a1a;
+  color: #e0e0e0;
 }
 
 .status-select:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #4a9eff;
 }
 
 .status-select.status-todo {
-  background: #fff3cd;
-  color: #856404;
-  border-color: #ffc107;
+  background: #3d3a2b;
+  color: #ffda6a;
+  border-color: #8a6d3b;
 }
 
 .status-select.status-in-progress {
-  background: #d1ecf1;
-  color: #0c5460;
-  border-color: #17a2b8;
+  background: #2a404a;
+  color: #7ae6ff;
+  border-color: #3d7a8a;
 }
 
 .status-select.status-done {
-  background: #d4edda;
-  color: #155724;
-  border-color: #28a745;
+  background: #2b3d2b;
+  color: #7aff7a;
+  border-color: #3a7a3a;
 }
 
 .task-description {
   margin: 0 0 10px 0;
-  color: #666;
+  color: #b0b0b0;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -87,7 +89,7 @@
 }
 
 .task-date {
-  color: #999;
+  color: #808080;
   font-size: 12px;
 }
 
@@ -105,20 +107,23 @@
   padding: 5px;
   border-radius: 4px;
   transition: background 0.2s;
+  color: #b0b0b0;
 }
 
 .btn-icon:hover {
-  background: #f0f0f0;
+  background: #404040;
+  color: #e0e0e0;
 }
 
 .btn-danger:hover {
-  background: #fee;
+  background: #3d1f1f;
+  color: #ff6b6b;
 }
 
 .empty-state {
   text-align: center;
   padding: 40px 20px;
-  color: #999;
+  color: #b0b0b0;
   font-size: 16px;
 }
 
