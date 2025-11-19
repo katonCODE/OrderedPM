@@ -113,7 +113,16 @@ function ProjectDetail() {
   };
 
   if (loading && !project) {
-    return <div className="loading">Loading project...</div>;
+    return (
+      <div className="loading-screen">
+        <div className="loading-animation">
+          <div className="loading-dot"></div>
+          <div className="loading-dot"></div>
+          <div className="loading-dot"></div>
+        </div>
+        <p className="loading-text">Loading project...</p>
+      </div>
+    );
   }
 
   if (!project) {
