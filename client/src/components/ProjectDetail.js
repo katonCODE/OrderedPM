@@ -1,5 +1,5 @@
 // client/src/components/ProjectDetail.js
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
@@ -13,6 +13,8 @@ function ProjectDetail() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [sortBy, setSortBy] = useState('newest');
+  const [filterPriority, setFilterPriority] = useState('all');
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', id],
@@ -26,6 +28,39 @@ function ProjectDetail() {
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
+
+  // Process tasks: filter and sort
+  const processedTasks = useMemo(() => {
+    let filtered = [...tasks];
+
+    // Filter by priority
+    if (filterPriority !== 'all') {
+      filtered = filtered.filter(task => task.priority === filterPriority);
+    }
+
+    // Sort tasks
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'priority':
+          const priorityMap = { high: 3, medium: 2, low: 1 };
+          const aPriority = priorityMap[a.priority] || 2;
+          const bPriority = priorityMap[b.priority] || 2;
+          return bPriority - aPriority;
+        
+        case 'due_date':
+          if (!a.due_date && !b.due_date) return 0;
+          if (!a.due_date) return 1;
+          if (!b.due_date) return -1;
+          return new Date(a.due_date) - new Date(b.due_date);
+        
+        case 'newest':
+        default:
+          return new Date(b.created_at) - new Date(a.created_at);
+      }
+    });
+
+    return filtered;
+  }, [tasks, sortBy, filterPriority]);
 
   const handleCreateTask = async (taskData) => {
     try {
@@ -167,11 +202,45 @@ function ProjectDetail() {
           />
         )}
 
+        {!loading && (
+          <div className="tasks-toolbar">
+            <div className="toolbar-controls">
+              <div className="toolbar-control">
+                <label htmlFor="sort-by">Sort By</label>
+                <select
+                  id="sort-by"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="toolbar-select"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="due_date">Due Date: Soonest</option>
+                  <option value="priority">Priority: High to Low</option>
+                </select>
+              </div>
+
+              <div className="toolbar-control">
+                <label htmlFor="filter-priority">Filter Priority</label>
+                <select
+                  id="filter-priority"
+                  value={filterPriority}
+                  onChange={(e) => setFilterPriority(e.target.value)}
+                  className="toolbar-select"
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="high">High Only</option>
+                  <option value="medium">Medium Only</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="loading">Loading tasks...</div>
         ) : (
           <TaskList
-            tasks={tasks}
+            tasks={processedTasks}
             onEdit={handleEditClick}
             onDelete={handleDeleteTask}
             onStatusChange={handleStatusChange}
