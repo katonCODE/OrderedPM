@@ -41,9 +41,32 @@
 }
 
 .project-detail-content {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px 40px;
+}
+
+.mission-control-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  min-height: calc(100vh - 300px);
+}
+
+.mission-control-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: fit-content;
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.mission-control-main {
+  min-height: 600px;
+  overflow-x: auto;
 }
 
 .project-actions {
@@ -206,6 +229,24 @@
   border-color: #505050;
 }
 
+.mission-control-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mission-control-sidebar::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.mission-control-sidebar::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 4px;
+}
+
+.mission-control-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #505050;
+}
+
 @media (max-width: 768px) {
   .project-detail-header {
     padding: 20px;
@@ -221,14 +262,19 @@
     gap: 15px;
   }
 
-  .toolbar-controls {
-    flex-direction: column;
-    align-items: stretch;
+  .mission-control-grid {
+    grid-template-columns: 1fr;
     gap: 15px;
   }
 
-  .toolbar-select {
-    min-width: 100%;
+  .mission-control-sidebar {
+    position: static;
+    max-height: none;
+    order: 2;
+  }
+
+  .mission-control-main {
+    order: 1;
   }
 }
 

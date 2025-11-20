@@ -1,0 +1,125 @@
+/* client/src/components/Timeline.css */
+.timeline {
+  background: #252525;
+  border-radius: 8px;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 300px;
+  max-height: 500px;
+}
+
+.timeline h3 {
+  margin: 0 0 15px 0;
+  color: #e0e0e0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.timeline-empty {
+  text-align: center;
+  color: #808080;
+  font-size: 14px;
+  padding: 20px;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border-left: 3px solid #4a9eff;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.timeline-item:hover {
+  background: #2a2a2a;
+  transform: translateX(4px);
+}
+
+.timeline-time {
+  flex-shrink: 0;
+  color: #808080;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 80px;
+  padding-top: 2px;
+}
+
+.timeline-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.timeline-title {
+  color: #e0e0e0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.timeline-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.priority-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.priority-high {
+  background: #3d1f1f;
+  color: #ff6b6b;
+  border: 1px solid #5a2f2f;
+}
+
+.priority-medium {
+  background: #3d3a2b;
+  color: #ffda6a;
+  border: 1px solid #5a5a3f;
+}
+
+.priority-low {
+  background: #2b3d2b;
+  color: #7aff7a;
+  border: 1px solid #3a5a3a;
+}
+
+.timeline-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.timeline-list::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.timeline-list::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 4px;
+}
+
+.timeline-list::-webkit-scrollbar-thumb:hover {
+  background: #505050;
+}
+
