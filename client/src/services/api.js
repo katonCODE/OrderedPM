@@ -1,7 +1,7 @@
 // client/src/services/api.js
 import { authService } from './auth';
 
-const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 let isRefreshing = false;
 let refreshPromise = null;
@@ -32,7 +32,7 @@ const getAuthHeaders = () => {
   }
   
   // Debug logging
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log('[API] Token retrieved:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN FOUND');
   }
   
@@ -41,7 +41,7 @@ const getAuthHeaders = () => {
     ...(token && { Authorization: `Bearer ${token}` }),
   };
   
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     console.log('[API] Headers being sent:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'NOT SET' });
   }
   
@@ -115,7 +115,7 @@ const fetchWithAuth = async (url, options = {}) => {
       ...options.headers,
     };
     
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log('[API] Making request to:', url);
       console.log('[API] Request headers:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'NOT SET' });
     }
@@ -125,7 +125,7 @@ const fetchWithAuth = async (url, options = {}) => {
       headers,
     });
     
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log('[API] Response status:', response.status, response.statusText);
     }
     

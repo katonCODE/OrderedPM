@@ -1,4 +1,4 @@
-// client/src/App.js
+// client/src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/auth';
