@@ -1,22 +1,29 @@
-// client/src/App.jsx
+// client/src/App.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/auth';
+import { User } from './types/schema';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ProjectDetail from './components/ProjectDetail';
 import EmailConfirmation from './components/EmailConfirmation';
 import './App.css';
 
+interface Session {
+  user: User;
+  access_token?: string;
+  [key: string]: unknown;
+}
+
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [emailConfirmed, setEmailConfirmed] = useState(true);
   const initialCheckComplete = useRef(false);
 
   useEffect(() => {
     checkAuth();
-    const authStateChange = authService.onAuthStateChange((event, session) => {
+    const authStateChange = authService.onAuthStateChange((event: string, session: Session | null) => {
       if (!initialCheckComplete.current) return;
       
       if (session) {
@@ -39,8 +46,8 @@ function App() {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        const session = await authService.getSession();
-        if (session) {
+        const session = await authService.getSession() as Session | null;
+        if (session && session.user) {
           setUser(session.user);
           setEmailConfirmed(!!session.user?.email_confirmed_at);
         } else {
