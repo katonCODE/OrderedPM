@@ -107,7 +107,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const { title, description, status, due_date, priority } = req.body;
+    const { title, description, status, due_date, priority, prevPosition, nextPosition } = req.body;
 
     // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
     let updatedTitle = null;
@@ -115,6 +115,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     let updatedStatus = null;
     let updatedDueDate = null;
     let updatedPriority = null;
+    let updatedPosition = null;
 
     if (title !== undefined) {
       const trimmedTitle = title.trim();
@@ -148,6 +149,30 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    // Handle fractional indexing for position updates
+    if (prevPosition !== undefined || nextPosition !== undefined) {
+      let newPosition;
+      
+      if (prevPosition === null && nextPosition === null) {
+        // Empty column - set to default starting position
+        newPosition = 10000;
+      } else if (prevPosition === null) {
+        // Dropped at the top: new position = nextPosition / 2
+        newPosition = nextPosition / 2;
+      } else if (nextPosition === null) {
+        // Dropped at the bottom: new position = prevPosition + 10000
+        newPosition = prevPosition + 10000;
+      } else {
+        // Dropped between two tasks: new position = (prevPosition + nextPosition) / 2
+        newPosition = (prevPosition + nextPosition) / 2;
+      }
+      
+      updatedPosition = newPosition;
+    } else if (req.body.position !== undefined) {
+      // Fallback: direct position assignment (for backward compatibility)
+      updatedPosition = req.body.position;
+    }
+
     const queryText = `
       UPDATE tasks 
       SET 
@@ -156,8 +181,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
         status = COALESCE($3, status),
         due_date = COALESCE($4, due_date),
         priority = COALESCE($5, priority),
+        position = COALESCE($6, position),
         updated_at = NOW()
-      WHERE id = $6 AND user_id = $7
+      WHERE id = $7 AND user_id = $8
       RETURNING *
     `;
 
@@ -167,6 +193,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updatedStatus,
       updatedDueDate,
       updatedPriority,
+      updatedPosition,
       req.params.id,
       req.userId
     ];

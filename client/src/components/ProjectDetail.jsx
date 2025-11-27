@@ -98,11 +98,84 @@ function ProjectDetail() {
     },
   });
 
+  const positionUpdateMutation = useMutation({
+    mutationFn: ({ taskId, prevPosition, nextPosition, status }) => {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) throw new Error('Task not found');
+      
+      // Always update status if provided (for cross-column moves)
+      // If status is undefined, keep current status (for same-column moves)
+      const updatedStatus = status !== undefined ? status : task.status;
+      
+      return tasksAPI.update(taskId, {
+        title: task.title,
+        description: task.description,
+        status: updatedStatus,
+        due_date: task.due_date || null,
+        priority: task.priority || 'medium',
+        prevPosition: prevPosition,
+        nextPosition: nextPosition,
+      });
+    },
+    onMutate: async ({ taskId, prevPosition, nextPosition, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['tasks', id] });
+      const previousTasks = queryClient.getQueryData(['tasks', id]);
+      
+      // Calculate new position optimistically
+      let newPosition;
+      if (prevPosition === null && nextPosition === null) {
+        newPosition = 10000;
+      } else if (prevPosition === null) {
+        newPosition = nextPosition / 2;
+      } else if (nextPosition === null) {
+        newPosition = prevPosition + 10000;
+      } else {
+        newPosition = (prevPosition + nextPosition) / 2;
+      }
+      
+      queryClient.setQueryData(['tasks', id], (old) =>
+        (old || []).map(t => {
+          if (t.id === taskId) {
+            const updated = { ...t, position: newPosition };
+            // Always update status if provided (for cross-column moves)
+            if (status !== undefined) {
+              updated.status = status;
+            }
+            return updated;
+          }
+          return t;
+        })
+      );
+      
+      return { previousTasks };
+    },
+    onError: (err, variables, context) => {
+      console.error('Position update error:', err);
+      if (context?.previousTasks) {
+        queryClient.setQueryData(['tasks', id], context.previousTasks);
+      }
+      // If status was being updated and position update failed, try status update as fallback
+      if (variables.status !== undefined && variables.status !== tasks.find(t => t.id === variables.taskId)?.status) {
+        const task = tasks.find(t => t.id === variables.taskId);
+        if (task) {
+          statusUpdateMutation.mutate({ taskId: variables.taskId, newStatus: variables.status, task });
+        }
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
+    },
+  });
+
   const handleStatusChange = (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
     if (task) {
       statusUpdateMutation.mutate({ taskId, newStatus, task });
     }
+  };
+
+  const handlePositionChange = (taskId, prevPosition, nextPosition, status) => {
+    positionUpdateMutation.mutate({ taskId, prevPosition, nextPosition, status });
   };
 
   const handleEditClick = (task) => {
@@ -197,6 +270,7 @@ function ProjectDetail() {
               <KanbanBoard
                 tasks={tasks}
                 onStatusChange={handleStatusChange}
+                onPositionChange={handlePositionChange}
                 onEdit={handleEditClick}
                 onDelete={handleDeleteTask}
                 selectedDate={selectedDate}
