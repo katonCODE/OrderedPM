@@ -10,14 +10,12 @@ const countWords = (text) => {
   return text.trim().split(/\s+/).length;
 };
 
-// Get public profile by username
-router.get('/:username', async (req, res) => {
+// Get current user's profile
+router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const { username } = req.params;
-    
     const result = await pool.query(
-      'SELECT id, username, full_name, avatar_url, bio FROM profiles WHERE username = $1',
-      [username]
+      'SELECT id, username, full_name, avatar_url, bio FROM profiles WHERE id = $1',
+      [req.userId]
     );
 
     if (result.rows.length === 0) {
@@ -31,12 +29,14 @@ router.get('/:username', async (req, res) => {
   }
 });
 
-// Get current user's profile
-router.get('/me', authenticateToken, async (req, res) => {
+// Get public profile by username
+router.get('/:username', async (req, res) => {
   try {
+    const { username } = req.params;
+    
     const result = await pool.query(
-      'SELECT id, username, full_name, avatar_url, bio FROM profiles WHERE id = $1',
-      [req.userId]
+      'SELECT id, username, full_name, avatar_url, bio FROM profiles WHERE username = $1',
+      [username]
     );
 
     if (result.rows.length === 0) {

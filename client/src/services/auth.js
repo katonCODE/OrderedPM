@@ -1,5 +1,5 @@
 // client/src/services/auth.js
-import { supabase } from './supabase';
+import { supabase, supabaseUrl } from './supabase';
 
 const getSupabaseAuthKey = () => {
   if (!supabaseUrl) return null;
