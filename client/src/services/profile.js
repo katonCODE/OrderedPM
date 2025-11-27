@@ -88,6 +88,12 @@ export const getMyProfile = async () => {
   try {
     return await fetchWithAuth(`${API_URL}/api/profiles/me`);
   } catch (error) {
+    // Handle 404 - profile doesn't exist yet
+    if (error.message.includes('404') || 
+        error.message.includes('Profile not found') || 
+        error.message.includes('Not Found')) {
+      return null; // Return null instead of throwing
+    }
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Unable to connect to server. Please check if the server is running.');
     }

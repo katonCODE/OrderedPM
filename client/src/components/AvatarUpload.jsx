@@ -1,14 +1,7 @@
 // client/src/components/AvatarUpload.jsx
 import React, { useState, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabase';
 import './AvatarUpload.css';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
 
 function AvatarUpload({ currentAvatarUrl, onUploadComplete, userId }) {
   const [uploading, setUploading] = useState(false);

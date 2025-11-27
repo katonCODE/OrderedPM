@@ -18,7 +18,10 @@ function Dashboard({ onLogout }) {
   const { data: profile } = useQuery({
     queryKey: ['myProfile'],
     queryFn: () => getMyProfile(),
-    retry: 1,
+    retry: false, // Don't retry on 404
+    refetchOnWindowFocus: false,
+    // Don't throw error - gracefully handle missing profiles
+    throwOnError: false,
   });
 
   const { data: projects = [], isLoading: loading, error: queryError } = useQuery({
