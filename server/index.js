@@ -18,7 +18,7 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       'http://localhost:3001',
       'https://orderedpm.onrender.com',
-      // Add your deployed frontend URL here
+      'https://ordered-pm.vercel.app',     // Add your deployed frontend URL here
     ].filter(Boolean);
     
     if (allowedOrigins.includes(origin)) {
