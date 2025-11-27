@@ -1,15 +1,25 @@
-// client/src/components/Dashboard.js
-import React, { useState } from 'react';
+// client/src/components/Dashboard.jsx
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI } from '../services/api';
+import { getMyProfile } from '../services/profile';
+import { authService } from '../services/auth';
 import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+
+  const { data: profile } = useQuery({
+    queryKey: ['myProfile'],
+    queryFn: () => getMyProfile(),
+    retry: 1,
+  });
 
   const { data: projects = [], isLoading: loading, error: queryError } = useQuery({
     queryKey: ['projects'],
@@ -62,13 +72,43 @@ function Dashboard({ onLogout }) {
     setEditingProject(null);
   };
 
+  const handleProfileClick = () => {
+    if (profile?.username) {
+      navigate(`/u/${profile.username}`);
+    }
+  };
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>OrderedPM</h1>
-        <button onClick={onLogout} className="btn-secondary">
-          Logout
-        </button>
+        <div className="dashboard-header-actions">
+          {profile && (
+            <button 
+              onClick={handleProfileClick}
+              className="btn-user-profile"
+              title={`View ${profile.full_name || profile.username}'s profile`}
+            >
+              {profile.avatar_url ? (
+                <img 
+                  src={profile.avatar_url} 
+                  alt={profile.full_name || profile.username}
+                  className="user-avatar-mini"
+                />
+              ) : (
+                <div className="user-avatar-mini-placeholder">
+                  <span>👤</span>
+                </div>
+              )}
+              <span className="user-name-mini">
+                {profile.full_name || profile.username}
+              </span>
+            </button>
+          )}
+          <button onClick={onLogout} className="btn-secondary">
+            Logout
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-content">

@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ProjectDetail from './components/ProjectDetail';
 import EmailConfirmation from './components/EmailConfirmation';
+import Profile from './components/Profile';
 import './App.css';
 
 interface Session {
@@ -127,6 +128,10 @@ function App() {
                 <Navigate to="/login" replace />
               )
             }
+          />
+          <Route
+            path="/u/:username"
+            element={<Profile />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,0 +1,164 @@
+.edit-profile-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.edit-profile-modal {
+  background: #252525;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.edit-profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 2px solid #404040;
+}
+
+.edit-profile-header h2 {
+  margin: 0;
+  color: #e0e0e0;
+  font-size: 24px;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  color: #b0b0b0;
+  font-size: 32px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.btn-close:hover {
+  background: #404040;
+  color: #e0e0e0;
+}
+
+.edit-profile-form {
+  padding: 30px;
+}
+
+.form-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #b0b0b0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #404040;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  font-size: 16px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.input-error {
+  border-color: #ff6b6b !important;
+}
+
+.error-text {
+  display: block;
+  margin-top: 6px;
+  color: #ff6b6b;
+  font-size: 12px;
+}
+
+.error-banner {
+  background: #3d1f1f;
+  color: #ff6b6b;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 30px;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  background: #404040;
+  color: #e0e0e0;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #505050;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .edit-profile-modal {
+    max-width: 100%;
+  }
+
+  .edit-profile-header,
+  .edit-profile-form {
+    padding: 20px;
+  }
+}
+
