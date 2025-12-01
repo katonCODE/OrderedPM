@@ -14,7 +14,7 @@ const countWords = (text) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, full_name, avatar_url, bio FROM profiles WHERE id = $1',
+      'SELECT id, username, full_name, avatar_url, bio, created_at, updated_at FROM profiles WHERE id = $1',
       [req.userId]
     );
 
@@ -29,14 +29,85 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
+// Create/initialize profile
+router.post('/me', authenticateToken, async (req, res) => {
+  try {
+    const { username, full_name, bio, avatar_url } = req.body;
+
+    // Check if profile already exists
+    const existingProfile = await pool.query(
+      'SELECT id FROM profiles WHERE id = $1',
+      [req.userId]
+    );
+
+    if (existingProfile.rows.length > 0) {
+      return res.status(409).json({ error: 'Profile already exists' });
+    }
+
+    // Validate username
+    if (!username || !username.trim()) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    const trimmedUsername = username.trim();
+
+    // Check if username already exists
+    const usernameCheck = await pool.query(
+      'SELECT id FROM profiles WHERE username = $1',
+      [trimmedUsername]
+    );
+
+    if (usernameCheck.rows.length > 0) {
+      return res.status(409).json({ error: 'Username already taken' });
+    }
+
+    // Validate bio word count if provided
+    if (bio !== undefined && bio !== null) {
+      const wordCount = countWords(bio);
+      if (wordCount > 150) {
+        return res.status(400).json({ error: 'Bio must be 150 words or less' });
+      }
+    }
+
+    // Create profile
+    const result = await pool.query(
+      `INSERT INTO profiles (id, username, full_name, bio, avatar_url)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, username, full_name, avatar_url, bio, created_at, updated_at`,
+      [
+        req.userId,
+        trimmedUsername,
+        full_name?.trim() || null,
+        bio?.trim() || null,
+        avatar_url || null
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating profile:', error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Username already taken' });
+    }
+    
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get public profile by username
 router.get('/:username', async (req, res) => {
   try {
     const { username } = req.params;
     
+    if (!username || username.trim() === '') {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+    
     const result = await pool.query(
-      'SELECT id, username, full_name, avatar_url, bio FROM profiles WHERE username = $1',
-      [username]
+      'SELECT id, username, full_name, avatar_url, bio, created_at FROM profiles WHERE username = $1',
+      [username.trim()]
     );
 
     if (result.rows.length === 0) {
@@ -119,9 +190,19 @@ router.put('/me', authenticateToken, async (req, res) => {
 
     const result = await pool.query(queryText, values);
 
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating profile:', error);
+    
+    // Handle unique constraint violation
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Username already taken' });
+    }
+    
     res.status(500).json({ error: 'Internal server error' });
   }
 });
