@@ -9,6 +9,7 @@ This is an application fully coded using Cursor in order to learn and explore it
 - 📁 Project management (Create, Read, Update, Delete projects)
 - ✅ Task management (Create, Read, Update, Delete tasks)
 - 📊 Task status tracking (To Do, In Progress, Done)
+- 🌟 Gemini 2.5 Flash integration for task creation assistance
 - 🎨 Modern, responsive UI/UX
 - 🚀 Ready for deployment (Vercel + Render)
 
