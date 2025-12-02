@@ -8,9 +8,13 @@ function Pagination({
   onPageChange, 
   itemsPerPage,
   totalItems,
+  hasMore = false,
   isLoading = false 
 }) {
-  if (totalPages <= 1) return null;
+  // Hide pagination if we have totalPages and it's 1 or less
+  // Or if we don't have totalPages and there's no more pages
+  if (totalPages !== null && totalPages <= 1) return null;
+  if (totalPages === null && !hasMore && currentPage === 1) return null;
 
   const handlePrevious = () => {
     if (currentPage > 1 && !isLoading) {
@@ -19,7 +23,10 @@ function Pagination({
   };
 
   const handleNext = () => {
-    if (currentPage < totalPages && !isLoading) {
+    const canGoNext = totalPages !== null 
+      ? currentPage < totalPages 
+      : hasMore;
+    if (canGoNext && !isLoading) {
       onPageChange(currentPage + 1);
     }
   };
@@ -31,6 +38,11 @@ function Pagination({
   };
 
   const getPageNumbers = () => {
+    // If we don't have totalPages, don't show page numbers (only Previous/Next)
+    if (totalPages === null) {
+      return [];
+    }
+    
     const pages = [];
     const maxVisible = 5;
     
@@ -66,12 +78,18 @@ function Pagination({
   };
 
   const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+  const endItem = totalItems !== null 
+    ? Math.min(currentPage * itemsPerPage, totalItems)
+    : currentPage * itemsPerPage;
 
   return (
     <div className="pagination-container">
       <div className="pagination-info">
-        Showing {startItem}-{endItem} of {totalItems}
+        {totalItems !== null ? (
+          <>Showing {startItem}-{endItem} of {totalItems}</>
+        ) : (
+          <>Showing {startItem}-{endItem}{hasMore ? '+' : ''}</>
+        )}
       </div>
       
       <div className="pagination-controls">
@@ -84,34 +102,36 @@ function Pagination({
           Previous
         </button>
         
-        <div className="pagination-pages">
-          {getPageNumbers().map((page, index) => {
-            if (page === 'ellipsis') {
+        {getPageNumbers().length > 0 && (
+          <div className="pagination-pages">
+            {getPageNumbers().map((page, index) => {
+              if (page === 'ellipsis') {
+                return (
+                  <span key={`ellipsis-${index}`} className="pagination-ellipsis">
+                    ...
+                  </span>
+                );
+              }
+              
               return (
-                <span key={`ellipsis-${index}`} className="pagination-ellipsis">
-                  ...
-                </span>
+                <button
+                  key={page}
+                  onClick={() => handlePageClick(page)}
+                  disabled={isLoading}
+                  className={`pagination-page ${currentPage === page ? 'active' : ''}`}
+                  aria-label={`Page ${page}`}
+                  aria-current={currentPage === page ? 'page' : undefined}
+                >
+                  {page}
+                </button>
               );
-            }
-            
-            return (
-              <button
-                key={page}
-                onClick={() => handlePageClick(page)}
-                disabled={isLoading}
-                className={`pagination-page ${currentPage === page ? 'active' : ''}`}
-                aria-label={`Page ${page}`}
-                aria-current={currentPage === page ? 'page' : undefined}
-              >
-                {page}
-              </button>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        )}
         
         <button
           onClick={handleNext}
-          disabled={currentPage === totalPages || isLoading}
+          disabled={(totalPages !== null && currentPage === totalPages) || (!hasMore && totalPages === null) || isLoading}
           className="pagination-btn"
           aria-label="Next page"
         >

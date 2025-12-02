@@ -100,6 +100,15 @@
   font-size: 18px;
 }
 
+.loading-subtle {
+  text-align: center;
+  padding: 10px;
+  color: #808080;
+  font-size: 14px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
 .btn-primary {
   padding: 10px 20px;
   background: #4a9eff;

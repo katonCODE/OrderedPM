@@ -9,6 +9,8 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
+      staleTime: 300000, // 5 minutes - data stays fresh for 5 minutes
+      gcTime: 600000, // 10 minutes - cached data is kept for 10 minutes (formerly cacheTime)
     },
   },
 });

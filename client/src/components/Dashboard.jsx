@@ -29,9 +29,14 @@ function Dashboard({ onLogout }) {
     throwOnError: false,
   });
 
-  const { data: projectsData, isLoading: loading, error: queryError } = useQuery({
+  const { data: projectsData, isFetching, isLoading: initialLoading, error: queryError } = useQuery({
     queryKey: ['projects', currentPage],
-    queryFn: () => projectsAPI.getAll({ limit: itemsPerPage, offset: (currentPage - 1) * itemsPerPage }),
+    queryFn: () => projectsAPI.getAll({ 
+      limit: itemsPerPage, 
+      offset: (currentPage - 1) * itemsPerPage,
+      includeCount: false // Don't request count - rely on hasMore for pagination
+    }),
+    placeholderData: (previousData) => previousData, // Show cached data immediately while fetching
   });
 
   // Handle both old format (array) and new format (object with data and pagination)
@@ -158,23 +163,27 @@ function Dashboard({ onLogout }) {
           />
         )}
 
-        {loading ? (
+        {initialLoading && !projectsData ? (
           <div className="loading">Loading projects...</div>
         ) : (
           <>
+            {isFetching && projectsData && (
+              <div className="loading-subtle">Refreshing projects...</div>
+            )}
             <ProjectList
               projects={projects}
               onEdit={handleEditClick}
               onDelete={handleDeleteClick}
             />
-            {pagination && (
+            {pagination && pagination.hasMore && (
               <Pagination
                 currentPage={currentPage}
-                totalPages={Math.ceil(pagination.total / itemsPerPage)}
+                totalPages={pagination.total !== null ? Math.ceil(pagination.total / itemsPerPage) : null}
                 onPageChange={setCurrentPage}
                 itemsPerPage={itemsPerPage}
                 totalItems={pagination.total}
-                isLoading={loading}
+                hasMore={pagination.hasMore}
+                isLoading={isFetching}
               />
             )}
           </>

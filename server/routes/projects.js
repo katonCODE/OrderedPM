@@ -9,31 +9,42 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
     const offset = parseInt(req.query.offset) || 0;
+    const includeCount = req.query.includeCount === 'true';
     
     // Validate limit and offset
     const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
     const validOffset = Math.max(0, offset);
     
-    // Get total count for pagination metadata
-    const countResult = await pool.query(
-      'SELECT COUNT(*) FROM projects WHERE user_id = $1',
-      [req.userId]
-    );
-    const total = parseInt(countResult.rows[0].count);
-    
-    // Get paginated projects
+    // Fetch limit + 1 to determine if there are more pages without COUNT query
+    const fetchLimit = validLimit + 1;
     const result = await pool.query(
       'SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
-      [req.userId, validLimit, validOffset]
+      [req.userId, fetchLimit, validOffset]
     );
     
+    // Determine hasMore by checking if we got more records than requested
+    const hasMore = result.rows.length > validLimit;
+    
+    // Return only the requested number of records (slice off the extra one)
+    const data = result.rows.slice(0, validLimit);
+    
+    // Only run COUNT query if explicitly requested
+    let total = null;
+    if (includeCount) {
+      const countResult = await pool.query(
+        'SELECT COUNT(*) FROM projects WHERE user_id = $1',
+        [req.userId]
+      );
+      total = parseInt(countResult.rows[0].count);
+    }
+    
     res.json({
-      data: result.rows,
+      data,
       pagination: {
         total,
         limit: validLimit,
         offset: validOffset,
-        hasMore: validOffset + validLimit < total
+        hasMore
       }
     });
   } catch (error) {

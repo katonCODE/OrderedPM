@@ -128,10 +128,11 @@ export const authAPI = {
 export const projectsAPI = {
   getAll: async (options = {}) => {
     try {
-      const { limit = 20, offset = 0 } = options;
+      const { limit = 20, offset = 0, includeCount = false } = options;
       const params = new URLSearchParams();
       if (limit !== undefined) params.append('limit', limit.toString());
       if (offset !== undefined) params.append('offset', offset.toString());
+      if (includeCount) params.append('includeCount', 'true');
       
       const url = `${API_URL}/api/projects${params.toString() ? `?${params.toString()}` : ''}`;
       return await fetchWithAuth(url);
