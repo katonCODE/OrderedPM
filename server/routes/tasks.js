@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Get all tasks for a project
 router.get('/project/:projectId', authenticateToken, async (req, res) => {
@@ -71,10 +72,115 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Generate task using AI
+router.post('/ai/generate', authenticateToken, async (req, res) => {
+  try {
+    const { prompt, project_id } = req.body;
+
+    // Validate prompt
+    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+      return res.status(400).json({ error: 'Prompt is required and must be a non-empty string' });
+    }
+
+    // Optionally validate project_id if provided
+    if (project_id) {
+      const projectCheck = await pool.query(
+        'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
+        [project_id, req.userId]
+      );
+
+      if (projectCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    }
+
+    // Check if GEMINI_API_KEY exists
+    if (!process.env.GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY is not configured');
+      return res.status(500).json({ error: 'AI service is not configured' });
+    }
+
+    // Initialize Google Generative AI
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+
+    // Create prompt for Gemini
+    const aiPrompt = `Based on the following user request, generate a task with a title, description, and priority level.
+
+User request: "${prompt.trim()}"
+
+Please respond with ONLY a valid JSON object in this exact format (no markdown, no code blocks, just the JSON):
+{
+  "title": "A clear and concise task title",
+  "description": "A detailed description of the task",
+  "priority": "low" | "medium" | "high"
+}
+
+The priority should be:
+- "low" for non-urgent tasks
+- "medium" for normal tasks
+- "high" for urgent or important tasks
+
+Return only the JSON object, nothing else.`;
+
+    // Generate content
+    const result = await model.generateContent(aiPrompt);
+    const response = await result.response;
+    let text = response.text();
+
+    // Remove markdown code block wrappers if present
+    text = text.trim();
+    if (text.startsWith('```json')) {
+      text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+    } else if (text.startsWith('```')) {
+      text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+    }
+    text = text.trim();
+
+    // Parse JSON response
+    let taskData;
+    try {
+      taskData = JSON.parse(text);
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', text);
+      return res.status(500).json({ error: 'Failed to parse AI response. Please try again.' });
+    }
+
+    // Validate required fields
+    if (!taskData.title || typeof taskData.title !== 'string') {
+      return res.status(500).json({ error: 'AI response missing valid title' });
+    }
+
+    // Validate and normalize priority
+    const validPriorities = ['low', 'medium', 'high'];
+    if (!taskData.priority || !validPriorities.includes(taskData.priority.toLowerCase())) {
+      taskData.priority = 'medium';
+    } else {
+      taskData.priority = taskData.priority.toLowerCase();
+    }
+
+    // Ensure description exists (can be empty string)
+    if (taskData.description === undefined || taskData.description === null) {
+      taskData.description = '';
+    }
+
+    // Return the parsed task data
+    res.json({
+      title: taskData.title.trim(),
+      description: taskData.description.trim() || null,
+      priority: taskData.priority,
+      project_id: project_id || null
+    });
+  } catch (error) {
+    console.error('Error generating task with AI:', error);
+    res.status(500).json({ error: 'Failed to generate task. Please try again.' });
+  }
+});
+
 // Create a new task
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { project_id, title, description, status, due_date, priority } = req.body;
+    const { project_id, title, description, status, start_date, due_date, priority } = req.body;
 
     if (!project_id) {
       return res.status(400).json({ error: 'Project ID is required' });
@@ -103,8 +209,8 @@ router.post('/', authenticateToken, async (req, res) => {
       : 'medium';
 
     const result = await pool.query(
-      'INSERT INTO tasks (project_id, user_id, title, description, status, due_date, priority) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [project_id, req.userId, title.trim(), description?.trim() || null, validStatus, due_date || null, validPriority]
+      'INSERT INTO tasks (project_id, user_id, title, description, status, start_date, due_date, priority) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [project_id, req.userId, title.trim(), description?.trim() || null, validStatus, start_date || null, due_date || null, validPriority]
     );
 
     res.status(201).json(result.rows[0]);
@@ -128,12 +234,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const { title, description, status, due_date, priority, prevPosition, nextPosition } = req.body;
+    const { title, description, status, start_date, due_date, priority, prevPosition, nextPosition } = req.body;
 
     // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
     let updatedTitle = null;
     let updatedDescription = null;
     let updatedStatus = null;
+    let updatedStartDate = null;
     let updatedDueDate = null;
     let updatedPriority = null;
     let updatedPosition = null;
@@ -156,6 +263,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
       } else {
         return res.status(400).json({ error: 'Invalid status value' });
       }
+    }
+
+    if (start_date !== undefined) {
+      updatedStartDate = start_date || null;
     }
 
     if (due_date !== undefined) {
@@ -200,11 +311,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
         title = COALESCE($1, title),
         description = COALESCE($2, description),
         status = COALESCE($3, status),
-        due_date = COALESCE($4, due_date),
-        priority = COALESCE($5, priority),
-        position = COALESCE($6, position),
+        start_date = COALESCE($4, start_date),
+        due_date = COALESCE($5, due_date),
+        priority = COALESCE($6, priority),
+        position = COALESCE($7, position),
         updated_at = NOW()
-      WHERE id = $7 AND user_id = $8
+      WHERE id = $8 AND user_id = $9
       RETURNING *
     `;
 
@@ -212,6 +324,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updatedTitle,
       updatedDescription,
       updatedStatus,
+      updatedStartDate,
       updatedDueDate,
       updatedPriority,
       updatedPosition,
