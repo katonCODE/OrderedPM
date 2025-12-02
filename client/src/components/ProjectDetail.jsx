@@ -7,6 +7,8 @@ import KanbanBoard from './KanbanBoard';
 import MiniCalendar from './MiniCalendar';
 import Timeline from './Timeline';
 import TaskForm from './TaskForm';
+import TaskCreationModal from './TaskCreationModal';
+import AITaskForm from './AITaskForm';
 import './ProjectDetail.css';
 
 function ProjectDetail() {
@@ -14,6 +16,8 @@ function ProjectDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [showCreationModal, setShowCreationModal] = useState(false);
+  const [showAITaskForm, setShowAITaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
 
@@ -50,6 +54,7 @@ function ProjectDetail() {
         return updatedArray;
       });
       setShowForm(false);
+      setShowAITaskForm(false);
     } catch (err) {
       throw err;
     }
@@ -106,6 +111,7 @@ function ProjectDetail() {
         title: task.title,
         description: task.description,
         status: newStatus,
+        start_date: task.start_date || null,
         due_date: task.due_date || null,
         priority: task.priority || 'medium',
       });
@@ -161,6 +167,7 @@ function ProjectDetail() {
         title: task.title,
         description: task.description,
         status: updatedStatus,
+        start_date: task.start_date || null,
         due_date: task.due_date || null,
         priority: task.priority || 'medium',
         prevPosition: prevPosition,
@@ -245,7 +252,27 @@ function ProjectDetail() {
 
   const handleFormClose = () => {
     setShowForm(false);
+    setShowCreationModal(false);
+    setShowAITaskForm(false);
     setEditingTask(null);
+  };
+
+  const handleNewTaskClick = () => {
+    if (editingTask) {
+      setShowForm(true);
+    } else {
+      setShowCreationModal(true);
+    }
+  };
+
+  const handleSelectManual = () => {
+    setShowCreationModal(false);
+    setShowForm(true);
+  };
+
+  const handleSelectAI = () => {
+    setShowCreationModal(false);
+    setShowAITaskForm(true);
   };
 
   const handleDateClick = (date) => {
@@ -295,12 +322,28 @@ function ProjectDetail() {
       <main className="project-detail-content">
         <div className="project-actions">
           <h2>Mission Control</h2>
-          <button onClick={() => setShowForm(true)} className="btn-primary">
+          <button onClick={handleNewTaskClick} className="btn-primary">
             + New Task
           </button>
         </div>
 
         {error && <div className="error-banner">{error}</div>}
+
+        {showCreationModal && (
+          <TaskCreationModal
+            onSelectManual={handleSelectManual}
+            onSelectAI={handleSelectAI}
+            onClose={handleFormClose}
+          />
+        )}
+
+        {showAITaskForm && (
+          <AITaskForm
+            projectId={id}
+            onSubmit={handleCreateTask}
+            onCancel={handleFormClose}
+          />
+        )}
 
         {showForm && (
           <TaskForm

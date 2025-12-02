@@ -64,6 +64,11 @@ function TaskList({ tasks, onEdit, onDelete, onStatusChange }) {
               <span className="task-date">
                 Created {new Date(task.created_at).toLocaleDateString()}
               </span>
+              {task.start_date && (
+                <span className="task-start-date">
+                  Starts {new Date(task.start_date).toLocaleDateString()}
+                </span>
+              )}
               {task.due_date && (
                 <span className="task-due-date">
                   Due {new Date(task.due_date).toLocaleDateString()}

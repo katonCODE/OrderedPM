@@ -102,7 +102,7 @@ router.post('/ai/generate', authenticateToken, async (req, res) => {
 
     // Initialize Google Generative AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Create prompt for Gemini
     const aiPrompt = `Based on the following user request, generate a task with a title, description, and priority level.

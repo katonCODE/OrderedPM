@@ -267,5 +267,19 @@ export const tasksAPI = {
       throw error;
     }
   },
+
+  generateTask: async (prompt, projectId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/ai/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt, project_id: projectId }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 

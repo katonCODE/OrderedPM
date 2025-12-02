@@ -11,16 +11,20 @@
   align-items: center;
   z-index: 1000;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .form-card {
   background: #252525;
   border-radius: 12px;
-  padding: 30px;
+  padding: 25px;
   width: 100%;
-  max-width: 500px;
+  max-width: 700px;
+  max-height: 90vh;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   border: 1px solid #404040;
+  overflow-y: auto;
+  margin: auto;
 }
 
 .form-card h2 {
@@ -31,6 +35,19 @@
 
 .form-group {
   margin-bottom: 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-group label {
@@ -126,5 +143,32 @@
 .btn-secondary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.read-only-field {
+  background: #2a2a2a !important;
+  color: #b0b0b0 !important;
+  cursor: not-allowed;
+}
+
+/* Style calendar icon in date inputs to be white - WebKit browsers (Chrome, Safari, Edge) */
+.form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) saturate(100%) invert(1) !important;
+  cursor: pointer;
+  opacity: 1 !important;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: 8px;
+}
+
+.form-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.8 !important;
+}
+
+/* For Firefox and other browsers - use color-scheme */
+.form-group input[type="date"] {
+  color-scheme: dark;
+  position: relative;
 }
 

@@ -1,0 +1,62 @@
+/* client/src/components/TaskCreationModal.css */
+.task-creation-modal {
+  max-width: 600px;
+}
+
+.modal-subtitle {
+  color: #b0b0b0;
+  margin-bottom: 30px;
+  font-size: 14px;
+}
+
+.creation-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.creation-option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px;
+  background: #1a1a1a;
+  border: 2px solid #404040;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #e0e0e0;
+  font-family: inherit;
+}
+
+.creation-option-btn:hover {
+  border-color: #4a9eff;
+  background: #252525;
+  transform: translateY(-2px);
+}
+
+.option-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.option-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #e0e0e0;
+}
+
+.option-description {
+  font-size: 14px;
+  color: #b0b0b0;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .creation-options {
+    grid-template-columns: 1fr;
+  }
+}
+
