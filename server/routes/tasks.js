@@ -17,12 +17,35 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const result = await pool.query(
-      'SELECT * FROM tasks WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC',
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    // Validate limit and offset
+    const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
+    const validOffset = Math.max(0, offset);
+    
+    // Get total count for pagination metadata
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND user_id = $2',
       [req.params.projectId, req.userId]
     );
+    const total = parseInt(countResult.rows[0].count);
+    
+    // Get paginated tasks, ordered by position (for Kanban) then created_at
+    const result = await pool.query(
+      'SELECT * FROM tasks WHERE project_id = $1 AND user_id = $2 ORDER BY COALESCE(position, 0) ASC, created_at DESC LIMIT $3 OFFSET $4',
+      [req.params.projectId, req.userId, validLimit, validOffset]
+    );
 
-    res.json(result.rows);
+    res.json({
+      data: result.rows,
+      pagination: {
+        total,
+        limit: validLimit,
+        offset: validOffset,
+        hasMore: validOffset + validLimit < total
+      }
+    });
   } catch (error) {
     console.error('Error fetching tasks:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -7,11 +7,35 @@ const authenticateToken = require('../middleware/auth');
 // Get all projects for the authenticated user
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC',
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    // Validate limit and offset
+    const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
+    const validOffset = Math.max(0, offset);
+    
+    // Get total count for pagination metadata
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM projects WHERE user_id = $1',
       [req.userId]
     );
-    res.json(result.rows);
+    const total = parseInt(countResult.rows[0].count);
+    
+    // Get paginated projects
+    const result = await pool.query(
+      'SELECT * FROM projects WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
+      [req.userId, validLimit, validOffset]
+    );
+    
+    res.json({
+      data: result.rows,
+      pagination: {
+        total,
+        limit: validLimit,
+        offset: validOffset,
+        hasMore: validOffset + validLimit < total
+      }
+    });
   } catch (error) {
     console.error('Error fetching projects:', error);
     res.status(500).json({ error: 'Internal server error' });

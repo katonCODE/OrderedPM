@@ -126,9 +126,15 @@ export const authAPI = {
 
 // Projects API
 export const projectsAPI = {
-  getAll: async () => {
+  getAll: async (options = {}) => {
     try {
-      return await fetchWithAuth(`${API_URL}/api/projects`);
+      const { limit = 20, offset = 0 } = options;
+      const params = new URLSearchParams();
+      if (limit !== undefined) params.append('limit', limit.toString());
+      if (offset !== undefined) params.append('offset', offset.toString());
+      
+      const url = `${API_URL}/api/projects${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
     } catch (error) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error('Unable to connect to server. Please check if the server is running.');
@@ -192,9 +198,15 @@ export const projectsAPI = {
 
 // Tasks API
 export const tasksAPI = {
-  getByProject: async (projectId) => {
+  getByProject: async (projectId, options = {}) => {
     try {
-      return await fetchWithAuth(`${API_URL}/api/tasks/project/${projectId}`);
+      const { limit = 50, offset = 0 } = options;
+      const params = new URLSearchParams();
+      if (limit !== undefined) params.append('limit', limit.toString());
+      if (offset !== undefined) params.append('offset', offset.toString());
+      
+      const url = `${API_URL}/api/tasks/project/${projectId}${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
     } catch (error) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error('Unable to connect to server. Please check if the server is running.');

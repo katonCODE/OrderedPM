@@ -22,10 +22,14 @@ function ProjectDetail() {
     queryFn: () => projectsAPI.getById(id),
   });
 
-  const { data: tasks = [], isLoading: tasksLoading, error: tasksError } = useQuery({
+  const { data: tasksData, isLoading: tasksLoading, error: tasksError } = useQuery({
     queryKey: ['tasks', id],
-    queryFn: () => tasksAPI.getByProject(id),
+    queryFn: () => tasksAPI.getByProject(id, { limit: 1000, offset: 0 }), // Large limit for Kanban view
   });
+
+  // Handle both old format (array) and new format (object with data and pagination)
+  // For KanbanBoard, we need all tasks, so we use a large limit
+  const tasks = tasksData?.data || tasksData || [];
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';

@@ -8,6 +8,7 @@ import { authService } from '../services/auth';
 import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
 import ConfirmDialog from './ConfirmDialog';
+import Pagination from './Pagination';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -16,6 +17,8 @@ function Dashboard({ onLogout }) {
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, projectId: null });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   const { data: profile } = useQuery({
     queryKey: ['myProfile'],
@@ -26,18 +29,25 @@ function Dashboard({ onLogout }) {
     throwOnError: false,
   });
 
-  const { data: projects = [], isLoading: loading, error: queryError } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => projectsAPI.getAll(),
+  const { data: projectsData, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['projects', currentPage],
+    queryFn: () => projectsAPI.getAll({ limit: itemsPerPage, offset: (currentPage - 1) * itemsPerPage }),
   });
+
+  // Handle both old format (array) and new format (object with data and pagination)
+  const projects = projectsData?.data || projectsData || [];
+  const pagination = projectsData?.pagination || null;
 
   const error = queryError?.message || '';
 
   const handleCreateProject = async (projectData) => {
     try {
       const newProject = await projectsAPI.create(projectData);
-      queryClient.setQueryData(['projects'], (old) => [newProject, ...(old || [])]);
+      // Invalidate queries to refetch with pagination
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
       setShowForm(false);
+      // Reset to first page to show the new project
+      setCurrentPage(1);
     } catch (err) {
       throw err;
     }
@@ -46,9 +56,8 @@ function Dashboard({ onLogout }) {
   const handleUpdateProject = async (id, projectData) => {
     try {
       const updatedProject = await projectsAPI.update(id, projectData);
-      queryClient.setQueryData(['projects'], (old) => 
-        (old || []).map(p => p.id === id ? updatedProject : p)
-      );
+      // Invalidate queries to refetch with pagination
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
       setEditingProject(null);
     } catch (err) {
       throw err;
@@ -65,8 +74,13 @@ function Dashboard({ onLogout }) {
 
     try {
       await projectsAPI.delete(projectId);
-      queryClient.setQueryData(['projects'], (old) => (old || []).filter(p => p.id !== projectId));
+      // Invalidate queries to refetch with pagination
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
       setDeleteConfirm({ isOpen: false, projectId: null });
+      // If current page becomes empty, go to previous page
+      if (projects.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      }
     } catch (err) {
       // Error will be handled by the UI if needed
       setDeleteConfirm({ isOpen: false, projectId: null });
@@ -147,11 +161,23 @@ function Dashboard({ onLogout }) {
         {loading ? (
           <div className="loading">Loading projects...</div>
         ) : (
-          <ProjectList
-            projects={projects}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteClick}
-          />
+          <>
+            <ProjectList
+              projects={projects}
+              onEdit={handleEditClick}
+              onDelete={handleDeleteClick}
+            />
+            {pagination && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(pagination.total / itemsPerPage)}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                totalItems={pagination.total}
+                isLoading={loading}
+              />
+            )}
+          </>
         )}
 
         <ConfirmDialog
