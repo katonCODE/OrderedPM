@@ -3,6 +3,41 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+// Validate required environment variables
+const validateEnvVariables = () => {
+  const requiredVars = [
+    'SUPABASE_JWT_SECRET',
+    'DATABASE_URL'
+  ];
+
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+
+  if (missingVars.length > 0) {
+    console.error('❌ Missing required environment variables:');
+    missingVars.forEach(varName => {
+      console.error(`   - ${varName}`);
+    });
+    console.error('\nPlease set these environment variables before starting the server.');
+    console.error('You can create a .env file in the server directory with these variables.');
+    process.exit(1);
+  }
+
+  // Validate that DATABASE_URL is not empty
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.trim() === '') {
+    console.error('❌ DATABASE_URL is set but empty. Please provide a valid database connection string.');
+    process.exit(1);
+  }
+
+  // Validate that SUPABASE_JWT_SECRET is not empty
+  if (process.env.SUPABASE_JWT_SECRET && process.env.SUPABASE_JWT_SECRET.trim() === '') {
+    console.error('❌ SUPABASE_JWT_SECRET is set but empty. Please provide a valid JWT secret.');
+    process.exit(1);
+  }
+};
+
+// Run validation before starting the server
+validateEnvVariables();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 

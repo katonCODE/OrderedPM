@@ -7,6 +7,7 @@ import { getMyProfile } from '../services/profile';
 import { authService } from '../services/auth';
 import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
+import ConfirmDialog from './ConfirmDialog';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -14,6 +15,7 @@ function Dashboard({ onLogout }) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, projectId: null });
 
   const { data: profile } = useQuery({
     queryKey: ['myProfile'],
@@ -53,16 +55,26 @@ function Dashboard({ onLogout }) {
     }
   };
 
-  const handleDeleteProject = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this project? All tasks will be deleted too.')) {
-      return;
-    }
+  const handleDeleteClick = (id) => {
+    setDeleteConfirm({ isOpen: true, projectId: id });
+  };
+
+  const handleDeleteConfirm = async () => {
+    const { projectId } = deleteConfirm;
+    if (!projectId) return;
+
     try {
-      await projectsAPI.delete(id);
-      queryClient.setQueryData(['projects'], (old) => (old || []).filter(p => p.id !== id));
+      await projectsAPI.delete(projectId);
+      queryClient.setQueryData(['projects'], (old) => (old || []).filter(p => p.id !== projectId));
+      setDeleteConfirm({ isOpen: false, projectId: null });
     } catch (err) {
       // Error will be handled by the UI if needed
+      setDeleteConfirm({ isOpen: false, projectId: null });
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, projectId: null });
   };
 
   const handleEditClick = (project) => {
@@ -138,9 +150,20 @@ function Dashboard({ onLogout }) {
           <ProjectList
             projects={projects}
             onEdit={handleEditClick}
-            onDelete={handleDeleteProject}
+            onDelete={handleDeleteClick}
           />
         )}
+
+        <ConfirmDialog
+          isOpen={deleteConfirm.isOpen}
+          onClose={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Project"
+          message="Are you sure you want to delete this project? All tasks will be deleted too. This action cannot be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          confirmButtonClass="btn-danger"
+        />
       </main>
     </div>
   );

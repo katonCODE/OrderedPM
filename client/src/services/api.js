@@ -1,35 +1,14 @@
 // client/src/services/api.js
 import { authService } from './auth';
+import { getAccessToken, clearTokens } from '../utils/token';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 let isRefreshing = false;
 let refreshPromise = null;
 
-const getSupabaseToken = () => {
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
-      try {
-        const authData = JSON.parse(localStorage.getItem(key));
-        if (authData && authData.access_token) {
-          return authData.access_token;
-        }
-      } catch (e) {
-        // Invalid JSON, continue searching
-      }
-    }
-  }
-  return null;
-};
-
 const getAuthHeaders = () => {
-  let token = localStorage.getItem('token');
-  
-  // Try to get token from Supabase's localStorage format if not found
-  if (!token) {
-    token = getSupabaseToken();
-  }
+  const token = getAccessToken();
   
   const headers = {
     'Content-Type': 'application/json',
@@ -54,7 +33,7 @@ const refreshToken = async () => {
     .catch((error) => {
       isRefreshing = false;
       refreshPromise = null;
-      localStorage.removeItem('token');
+      clearTokens();
       throw error;
     });
   
@@ -122,15 +101,7 @@ const fetchWithAuth = async (url, options = {}) => {
         await refreshToken();
         return await makeRequest();
       } catch (refreshError) {
-        localStorage.removeItem('token');
-        // Also clear Supabase auth token
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
-            localStorage.removeItem(key);
-            break;
-          }
-        }
+        clearTokens();
         window.location.href = '/login';
         throw new Error('Session expired. Please log in again.');
       }

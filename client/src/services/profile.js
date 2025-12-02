@@ -1,27 +1,11 @@
 // client/src/services/profile.js
 import { authService } from './auth';
+import { getAccessToken } from '../utils/token';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 const getAuthHeaders = () => {
-  let token = localStorage.getItem('token');
-  
-  // Try to get token from Supabase's localStorage format if not found
-  if (!token) {
-    const supabaseKey = Object.keys(localStorage).find(key => 
-      key.startsWith('sb-') && key.endsWith('-auth-token')
-    );
-    if (supabaseKey) {
-      try {
-        const authData = JSON.parse(localStorage.getItem(supabaseKey));
-        if (authData && authData.access_token) {
-          token = authData.access_token;
-        }
-      } catch (e) {
-        // Invalid JSON, continue
-      }
-    }
-  }
+  const token = getAccessToken();
   
   return {
     'Content-Type': 'application/json',

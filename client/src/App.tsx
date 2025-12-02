@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/auth';
+import { getAccessToken } from './utils/token';
 import { User } from './types/schema';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -45,7 +46,7 @@ function App() {
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAccessToken();
       if (token) {
         const session = await authService.getSession() as Session | null;
         if (session && session.user) {
