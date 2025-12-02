@@ -37,7 +37,18 @@ function ProjectDetail() {
   const handleCreateTask = async (taskData) => {
     try {
       const newTask = await tasksAPI.create(taskData);
-      queryClient.setQueryData(['tasks', id], (old) => [newTask, ...(old || [])]);
+      queryClient.setQueryData(['tasks', id], (old) => {
+        const oldArray = Array.isArray(old) ? old : old?.data || [];
+        const updatedArray = [newTask, ...oldArray];
+        
+        // Return in same format as received
+        if (Array.isArray(old)) {
+          return updatedArray;
+        } else if (old && typeof old === 'object' && 'data' in old) {
+          return { ...old, data: updatedArray };
+        }
+        return updatedArray;
+      });
       setShowForm(false);
     } catch (err) {
       throw err;
@@ -47,9 +58,18 @@ function ProjectDetail() {
   const handleUpdateTask = async (taskId, taskData) => {
     try {
       const updatedTask = await tasksAPI.update(taskId, taskData);
-      queryClient.setQueryData(['tasks', id], (old) => 
-        (old || []).map(t => t.id === taskId ? updatedTask : t)
-      );
+      queryClient.setQueryData(['tasks', id], (old) => {
+        const oldArray = Array.isArray(old) ? old : old?.data || [];
+        const updatedArray = oldArray.map(t => t.id === taskId ? updatedTask : t);
+        
+        // Return in same format as received
+        if (Array.isArray(old)) {
+          return updatedArray;
+        } else if (old && typeof old === 'object' && 'data' in old) {
+          return { ...old, data: updatedArray };
+        }
+        return updatedArray;
+      });
       setEditingTask(null);
       setShowForm(false);
     } catch (err) {
@@ -63,7 +83,18 @@ function ProjectDetail() {
     }
     try {
       await tasksAPI.delete(taskId);
-      queryClient.setQueryData(['tasks', id], (old) => (old || []).filter(t => t.id !== taskId));
+      queryClient.setQueryData(['tasks', id], (old) => {
+        const oldArray = Array.isArray(old) ? old : old?.data || [];
+        const updatedArray = oldArray.filter(t => t.id !== taskId);
+        
+        // Return in same format as received
+        if (Array.isArray(old)) {
+          return updatedArray;
+        } else if (old && typeof old === 'object' && 'data' in old) {
+          return { ...old, data: updatedArray };
+        }
+        return updatedArray;
+      });
     } catch (err) {
       // Error will be handled by the UI if needed
     }
@@ -82,12 +113,27 @@ function ProjectDetail() {
     onMutate: async ({ taskId, newStatus }) => {
       await queryClient.cancelQueries({ queryKey: ['tasks', id] });
       const previousTasks = queryClient.getQueryData(['tasks', id]);
-      const task = previousTasks?.find(t => t.id === taskId);
+      
+      // Handle both array and paginated object formats
+      const tasksArray = Array.isArray(previousTasks)
+        ? previousTasks
+        : previousTasks?.data || [];
+      
+      const task = tasksArray.find(t => t.id === taskId);
       
       if (task) {
-        queryClient.setQueryData(['tasks', id], (old) =>
-          (old || []).map(t => t.id === taskId ? { ...t, status: newStatus } : t)
-        );
+        queryClient.setQueryData(['tasks', id], (old) => {
+          const oldArray = Array.isArray(old) ? old : old?.data || [];
+          const updatedArray = oldArray.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
+          
+          // Return in same format as received
+          if (Array.isArray(old)) {
+            return updatedArray;
+          } else if (old && typeof old === 'object' && 'data' in old) {
+            return { ...old, data: updatedArray };
+          }
+          return updatedArray;
+        });
       }
       
       return { previousTasks };
@@ -137,8 +183,10 @@ function ProjectDetail() {
         newPosition = (prevPosition + nextPosition) / 2;
       }
       
-      queryClient.setQueryData(['tasks', id], (old) =>
-        (old || []).map(t => {
+      queryClient.setQueryData(['tasks', id], (old) => {
+        // Handle both array and paginated object formats
+        const oldArray = Array.isArray(old) ? old : old?.data || [];
+        const updatedArray = oldArray.map(t => {
           if (t.id === taskId) {
             const updated = { ...t, position: newPosition };
             // Always update status if provided (for cross-column moves)
@@ -148,8 +196,16 @@ function ProjectDetail() {
             return updated;
           }
           return t;
-        })
-      );
+        });
+        
+        // Return in same format as received
+        if (Array.isArray(old)) {
+          return updatedArray;
+        } else if (old && typeof old === 'object' && 'data' in old) {
+          return { ...old, data: updatedArray };
+        }
+        return updatedArray;
+      });
       
       return { previousTasks };
     },
