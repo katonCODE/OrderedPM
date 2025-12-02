@@ -95,8 +95,6 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update a task
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    console.log('Received Update Payload:', req.body);
-
     // Verify task exists and belongs to user
     const existingTask = await pool.query(
       'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
@@ -198,12 +196,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       req.userId
     ];
 
-    console.log('Executing SQL:', queryText.trim());
-    console.log('With Values:', values);
-
     const result = await pool.query(queryText, values);
-
-    console.log('Update Result:', result.rows[0]);
 
     res.json(result.rows[0]);
   } catch (error) {

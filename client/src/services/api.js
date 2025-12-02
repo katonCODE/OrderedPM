@@ -31,19 +31,10 @@ const getAuthHeaders = () => {
     token = getSupabaseToken();
   }
   
-  // Debug logging
-  if (import.meta.env.DEV) {
-    console.log('[API] Token retrieved:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN FOUND');
-  }
-  
   const headers = {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
   };
-  
-  if (import.meta.env.DEV) {
-    console.log('[API] Headers being sent:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'NOT SET' });
-  }
   
   return headers;
 };
@@ -115,19 +106,10 @@ const fetchWithAuth = async (url, options = {}) => {
       ...options.headers,
     };
     
-    if (import.meta.env.DEV) {
-      console.log('[API] Making request to:', url);
-      console.log('[API] Request headers:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'NOT SET' });
-    }
-    
     const response = await fetch(url, {
       ...options,
       headers,
     });
-    
-    if (import.meta.env.DEV) {
-      console.log('[API] Response status:', response.status, response.statusText);
-    }
     
     return handleResponse(response, { url, options });
   };
