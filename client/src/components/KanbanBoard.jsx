@@ -38,6 +38,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
   const handleDragEnd = (result) => {
     const { destination, source, draggableId } = result;
 
+    // Step 1: Early validation
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
@@ -52,26 +53,39 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
     
     if (!newStatus) return;
 
+    // Step 2: Determine move type
     const taskId = draggableId;
     const isSameColumn = destination.droppableId === source.droppableId;
     
-    // Get tasks for destination column, excluding the dragged task
-    // This ensures we only use destination column positions for cross-column moves
-    const destColumnTasks = getTasksForColumn(newStatus).filter(t => t.id !== taskId);
+    // Step 3: Get destination column tasks (conditional logic)
+    let destColumnTasks;
     
-    // Calculate prevPosition and nextPosition for fractional indexing
-    let prevPosition = null;
-    let nextPosition = null;
-    
-    // Adjust index for same-column moves
-    let targetIndex = destination.index;
-    if (isSameColumn && source.index < destination.index) {
-      // Moving down: adjust index since task is removed from above
-      targetIndex = destination.index - 1;
+    if (isSameColumn) {
+      // Same-column move: dragged task is in the destination column
+      // Get full destination column array (includes dragged task)
+      const fullDestColumnTasks = getTasksForColumn(newStatus);
+      
+      // Verify dragged task exists in this array (safety check)
+      const draggedTask = fullDestColumnTasks.find(t => String(t.id) === String(taskId));
+      if (!draggedTask) return;
+      
+      // Create filtered array excluding the dragged task
+      destColumnTasks = fullDestColumnTasks.filter(t => String(t.id) !== String(taskId));
+    } else {
+      // Cross-column move: dragged task is NOT in the destination column
+      // Get destination column tasks directly (no filtering needed)
+      destColumnTasks = getTasksForColumn(newStatus);
     }
     
-    // Ensure targetIndex is within valid bounds
-    targetIndex = Math.max(0, Math.min(targetIndex, destColumnTasks.length));
+    // Step 4: Calculate targetIndex
+    // destination.index from @hello-pangea/dnd represents the final position in the reordered list.
+    // This directly maps to the insertion point in destColumnTasks (which excludes the dragged task).
+    // No adjustment is needed for either same-column or cross-column moves.
+    let targetIndex = Math.max(0, Math.min(destination.index, destColumnTasks.length));
+    
+    // Step 5: Calculate prevPosition and nextPosition for fractional indexing
+    let prevPosition = null;
+    let nextPosition = null;
     
     if (destColumnTasks.length === 0) {
       // Empty column - both positions are null
@@ -80,7 +94,6 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
     } else if (targetIndex === 0) {
       // Dropped at the top
       prevPosition = null;
-      // Use actual position if available, otherwise use a default that's less than typical starting position
       const firstTaskPos = destColumnTasks[0].position;
       nextPosition = firstTaskPos !== null && firstTaskPos !== undefined ? firstTaskPos : 10000;
     } else if (targetIndex >= destColumnTasks.length) {
@@ -108,8 +121,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
       }
     }
     
-    // Update position and status
-    // For cross-column moves, always ensure status is updated
+    // Step 6: Call onPositionChange to update position and status
     if (onPositionChange) {
       try {
         // For cross-column moves: always pass newStatus to update status
