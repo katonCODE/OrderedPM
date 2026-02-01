@@ -44,7 +44,7 @@ function ProjectDetail() {
       queryClient.setQueryData(['tasks', id], (old) => {
         const oldArray = Array.isArray(old) ? old : old?.data || [];
         const updatedArray = [newTask, ...oldArray];
-        
+
         // Return in same format as received
         if (Array.isArray(old)) {
           return updatedArray;
@@ -66,7 +66,7 @@ function ProjectDetail() {
       queryClient.setQueryData(['tasks', id], (old) => {
         const oldArray = Array.isArray(old) ? old : old?.data || [];
         const updatedArray = oldArray.map(t => t.id === taskId ? updatedTask : t);
-        
+
         // Return in same format as received
         if (Array.isArray(old)) {
           return updatedArray;
@@ -91,7 +91,7 @@ function ProjectDetail() {
       queryClient.setQueryData(['tasks', id], (old) => {
         const oldArray = Array.isArray(old) ? old : old?.data || [];
         const updatedArray = oldArray.filter(t => t.id !== taskId);
-        
+
         // Return in same format as received
         if (Array.isArray(old)) {
           return updatedArray;
@@ -119,19 +119,19 @@ function ProjectDetail() {
     onMutate: async ({ taskId, newStatus }) => {
       await queryClient.cancelQueries({ queryKey: ['tasks', id] });
       const previousTasks = queryClient.getQueryData(['tasks', id]);
-      
+
       // Handle both array and paginated object formats
       const tasksArray = Array.isArray(previousTasks)
         ? previousTasks
         : previousTasks?.data || [];
-      
+
       const task = tasksArray.find(t => t.id === taskId);
-      
+
       if (task) {
         queryClient.setQueryData(['tasks', id], (old) => {
           const oldArray = Array.isArray(old) ? old : old?.data || [];
           const updatedArray = oldArray.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
-          
+
           // Return in same format as received
           if (Array.isArray(old)) {
             return updatedArray;
@@ -141,7 +141,7 @@ function ProjectDetail() {
           return updatedArray;
         });
       }
-      
+
       return { previousTasks };
     },
     onError: (err, variables, context) => {
@@ -158,11 +158,11 @@ function ProjectDetail() {
     mutationFn: ({ taskId, prevPosition, nextPosition, status }) => {
       const task = tasks.find(t => t.id === taskId);
       if (!task) throw new Error('Task not found');
-      
+
       // Always update status if provided (for cross-column moves)
       // If status is undefined, keep current status (for same-column moves)
       const updatedStatus = status !== undefined ? status : task.status;
-      
+
       return tasksAPI.update(taskId, {
         title: task.title,
         description: task.description,
@@ -177,7 +177,7 @@ function ProjectDetail() {
     onMutate: async ({ taskId, prevPosition, nextPosition, status }) => {
       await queryClient.cancelQueries({ queryKey: ['tasks', id] });
       const previousTasks = queryClient.getQueryData(['tasks', id]);
-      
+
       // Calculate new position optimistically
       let newPosition;
       if (prevPosition === null && nextPosition === null) {
@@ -189,7 +189,7 @@ function ProjectDetail() {
       } else {
         newPosition = (prevPosition + nextPosition) / 2;
       }
-      
+
       queryClient.setQueryData(['tasks', id], (old) => {
         // Handle both array and paginated object formats
         const oldArray = Array.isArray(old) ? old : old?.data || [];
@@ -204,7 +204,7 @@ function ProjectDetail() {
           }
           return t;
         });
-        
+
         // Return in same format as received
         if (Array.isArray(old)) {
           return updatedArray;
@@ -213,7 +213,7 @@ function ProjectDetail() {
         }
         return updatedArray;
       });
-      
+
       return { previousTasks };
     },
     onError: (err, variables, context) => {
@@ -285,22 +285,25 @@ function ProjectDetail() {
 
   if (loading && !project) {
     return (
-      <div className="loading-screen">
-        <div className="loading-animation">
-          <div className="loading-dot"></div>
-          <div className="loading-dot"></div>
-          <div className="loading-dot"></div>
+      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center text-[#e0e0e0]">
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse opacity-40"></div>
+          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse opacity-40" style={{ animationDelay: '0.2s' }}></div>
+          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse opacity-40" style={{ animationDelay: '0.4s' }}></div>
         </div>
-        <p className="loading-text">Loading project...</p>
+        <p className="text-gray-400">Loading project...</p>
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div className="error-container">
-        <p>Project not found</p>
-        <button onClick={() => navigate('/')} className="btn-primary">
+      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center px-6">
+        <p className="text-red-400 text-lg mb-6">Project not found</p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+        >
           Back to Dashboard
         </button>
       </div>
@@ -308,26 +311,54 @@ function ProjectDetail() {
   }
 
   return (
-    <div className="project-detail">
-      <header className="project-detail-header">
-        <button onClick={() => navigate('/')} className="btn-back">
-          ← Back to Projects
-        </button>
-        <div className="project-info">
-          <h1>{project.name}</h1>
-          {project.description && <p className="project-description">{project.description}</p>}
+    <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
+      {/* Background gradient effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 -left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 -right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+      </div>
+
+      {/* Header */}
+      <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 md:py-8">
+          <button
+            onClick={() => navigate('/')}
+            className="mb-4 text-blue-400 hover:text-blue-300 transition-colors font-medium flex items-center gap-2"
+          >
+            ← Back to Projects
+          </button>
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-2">
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                {project.name}
+              </span>
+            </h1>
+            {project.description && (
+              <p className="text-gray-400 text-base md:text-lg leading-relaxed">
+                {project.description}
+              </p>
+            )}
+          </div>
         </div>
       </header>
 
-      <main className="project-detail-content">
-        <div className="project-actions">
-          <h2>Mission Control</h2>
-          <button onClick={handleNewTaskClick} className="btn-primary">
+      {/* Main Content */}
+      <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">Mission Control</h2>
+          <button
+            onClick={handleNewTaskClick}
+            className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+          >
             + New Task
           </button>
         </div>
 
-        {error && <div className="error-banner">{error}</div>}
+        {error && (
+          <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
+            {error}
+          </div>
+        )}
 
         {showCreationModal && (
           <TaskCreationModal
@@ -355,10 +386,10 @@ function ProjectDetail() {
         )}
 
         {loading ? (
-          <div className="loading">Loading tasks...</div>
+          <div className="text-center py-20 text-gray-400">Loading tasks...</div>
         ) : (
-          <div className="mission-control-grid">
-            <aside className="mission-control-sidebar">
+          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
+            <aside className="flex flex-col gap-6 h-fit lg:sticky lg:top-6 lg:max-h-[calc(100vh-120px)] overflow-y-auto">
               <MiniCalendar
                 tasks={tasks}
                 onDateClick={handleDateClick}
@@ -369,7 +400,7 @@ function ProjectDetail() {
                 onTaskClick={handleTaskClick}
               />
             </aside>
-            <div className="mission-control-main">
+            <div className="min-h-[600px]">
               <KanbanBoard
                 tasks={tasks}
                 onStatusChange={handleStatusChange}

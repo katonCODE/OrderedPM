@@ -31,8 +31,8 @@ function Dashboard({ onLogout }) {
 
   const { data: projectsData, isFetching, isLoading: initialLoading, error: queryError } = useQuery({
     queryKey: ['projects', currentPage],
-    queryFn: () => projectsAPI.getAll({ 
-      limit: itemsPerPage, 
+    queryFn: () => projectsAPI.getAll({
+      limit: itemsPerPage,
       offset: (currentPage - 1) * itemsPerPage,
       includeCount: false // Don't request count - rely on hasMore for pagination
     }),
@@ -113,62 +113,92 @@ function Dashboard({ onLogout }) {
   };
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>OrderedPM</h1>
-        <div className="dashboard-header-actions">
-          {profile && (
-            <button 
-              onClick={handleProfileClick}
-              className="btn-user-profile"
-              title={`View ${profile.full_name || profile.username}'s profile`}
-            >
-              {profile.avatar_url ? (
-                <img 
-                  src={profile.avatar_url} 
-                  alt={profile.full_name || profile.username}
-                  className="user-avatar-mini"
-                />
-              ) : (
-                <div className="user-avatar-mini-placeholder">
-                  <span>👤</span>
-                </div>
-              )}
-              <span className="user-name-mini">
-                {profile.full_name || profile.username}
+    <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
+      {/* Background gradient effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 -left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 -right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+      </div>
+
+      {/* Header */}
+      <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-4 md:py-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl md:text-3xl font-bold">
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                OrderedPM
               </span>
-            </button>
-          )}
-          <button onClick={onLogout} className="btn-secondary">
-            Logout
-          </button>
+            </h1>
+            <div className="flex items-center gap-4">
+              {profile && (
+                <button
+                  onClick={handleProfileClick}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
+                  title={`View ${profile.full_name || profile.username}'s profile`}
+                >
+                  {profile.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.full_name || profile.username}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                      <span>👤</span>
+                    </div>
+                  )}
+                  <span className="text-sm font-medium text-[#e0e0e0] hidden sm:inline">
+                    {profile.full_name || profile.username}
+                  </span>
+                </button>
+              )}
+              <button
+                onClick={onLogout}
+                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="dashboard-content">
-        <div className="dashboard-actions">
-          <h2>My Projects</h2>
-          <button onClick={() => setShowForm(true)} className="btn-primary">
+      {/* Main Content */}
+      <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">My Projects</h2>
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+          >
             + New Project
           </button>
         </div>
 
-        {error && <div className="error-banner">{error}</div>}
+        {error && (
+          <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
+            {error}
+          </div>
+        )}
 
         {showForm && (
-          <ProjectForm
-            project={editingProject}
-            onSubmit={editingProject ? handleUpdateProject : handleCreateProject}
-            onCancel={handleFormClose}
-          />
+          <div className="mb-8">
+            <ProjectForm
+              project={editingProject}
+              onSubmit={editingProject ? handleUpdateProject : handleCreateProject}
+              onCancel={handleFormClose}
+            />
+          </div>
         )}
 
         {initialLoading && !projectsData ? (
-          <div className="loading">Loading projects...</div>
+          <div className="text-center py-20 text-gray-400 text-lg">Loading projects...</div>
         ) : (
           <>
             {isFetching && projectsData && (
-              <div className="loading-subtle">Refreshing projects...</div>
+              <div className="text-center py-4 text-gray-500 text-sm italic opacity-70">
+                Refreshing projects...
+              </div>
             )}
             <ProjectList
               projects={projects}
@@ -176,15 +206,17 @@ function Dashboard({ onLogout }) {
               onDelete={handleDeleteClick}
             />
             {pagination && pagination.hasMore && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={pagination.total !== null ? Math.ceil(pagination.total / itemsPerPage) : null}
-                onPageChange={setCurrentPage}
-                itemsPerPage={itemsPerPage}
-                totalItems={pagination.total}
-                hasMore={pagination.hasMore}
-                isLoading={isFetching}
-              />
+              <div className="mt-8">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={pagination.total !== null ? Math.ceil(pagination.total / itemsPerPage) : null}
+                  onPageChange={setCurrentPage}
+                  itemsPerPage={itemsPerPage}
+                  totalItems={pagination.total}
+                  hasMore={pagination.hasMore}
+                  isLoading={isFetching}
+                />
+              </div>
             )}
           </>
         )}

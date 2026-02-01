@@ -1,7 +1,6 @@
 // client/src/components/KanbanBoard.js
 import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import './KanbanBoard.css';
 
 function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, selectedDate }) {
   const columns = [
@@ -12,7 +11,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
 
   const getTasksForColumn = (status) => {
     let filtered = tasks.filter(task => task.status === status);
-    
+
     if (selectedDate) {
       filtered = filtered.filter(task => {
         if (!task.due_date) return false;
@@ -21,7 +20,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
         return taskDate === selectedDateStr;
       });
     }
-    
+
     // Sort by position (nulls last), then by created_at
     filtered.sort((a, b) => {
       const posA = a.position ?? Infinity;
@@ -31,7 +30,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
       }
       return new Date(b.created_at) - new Date(a.created_at);
     });
-    
+
     return filtered;
   };
 
@@ -50,25 +49,25 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
 
     const newStatus = statusMap[destination.droppableId];
     const oldStatus = statusMap[source.droppableId];
-    
+
     if (!newStatus) return;
 
     // Step 2: Determine move type
     const taskId = draggableId;
     const isSameColumn = destination.droppableId === source.droppableId;
-    
+
     // Step 3: Get destination column tasks (conditional logic)
     let destColumnTasks;
-    
+
     if (isSameColumn) {
       // Same-column move: dragged task is in the destination column
       // Get full destination column array (includes dragged task)
       const fullDestColumnTasks = getTasksForColumn(newStatus);
-      
+
       // Verify dragged task exists in this array (safety check)
       const draggedTask = fullDestColumnTasks.find(t => String(t.id) === String(taskId));
       if (!draggedTask) return;
-      
+
       // Create filtered array excluding the dragged task
       destColumnTasks = fullDestColumnTasks.filter(t => String(t.id) !== String(taskId));
     } else {
@@ -76,17 +75,17 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
       // Get destination column tasks directly (no filtering needed)
       destColumnTasks = getTasksForColumn(newStatus);
     }
-    
+
     // Step 4: Calculate targetIndex
     // destination.index from @hello-pangea/dnd represents the final position in the reordered list.
     // This directly maps to the insertion point in destColumnTasks (which excludes the dragged task).
     // No adjustment is needed for either same-column or cross-column moves.
     let targetIndex = Math.max(0, Math.min(destination.index, destColumnTasks.length));
-    
+
     // Step 5: Calculate prevPosition and nextPosition for fractional indexing
     let prevPosition = null;
     let nextPosition = null;
-    
+
     if (destColumnTasks.length === 0) {
       // Empty column - both positions are null
       prevPosition = null;
@@ -106,10 +105,10 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
       // Dropped between two tasks
       const taskBefore = destColumnTasks[targetIndex - 1];
       const taskAfter = destColumnTasks[targetIndex];
-      
+
       const beforePos = taskBefore.position;
       const afterPos = taskAfter.position;
-      
+
       // If both have positions, use them
       if (beforePos !== null && beforePos !== undefined && afterPos !== null && afterPos !== undefined) {
         prevPosition = beforePos;
@@ -120,7 +119,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
         nextPosition = afterPos !== null && afterPos !== undefined ? afterPos : (10000 + (targetIndex * 1000));
       }
     }
-    
+
     // Step 6: Call onPositionChange to update position and status
     if (onPositionChange) {
       try {
@@ -162,84 +161,143 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
   };
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="kanban-board">
-        {columns.map((column) => {
-          const columnTasks = getTasksForColumn(column.status);
-          
-          return (
-            <div key={column.id} className="kanban-column">
-              <div className="kanban-column-header">
-                <h3>{column.title}</h3>
-                <span className="kanban-column-count">{columnTasks.length}</span>
-              </div>
-              <Droppable droppableId={column.id}>
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className={`kanban-column-content ${snapshot.isDraggingOver ? 'dragging-over' : ''}`}
-                  >
-                    {columnTasks.length === 0 ? (
-                      <div className="kanban-empty-state">No tasks</div>
-                    ) : (
-                      columnTasks.map((task, index) => (
-                        <Draggable key={task.id} draggableId={String(task.id)} index={index}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`kanban-task-card ${snapshot.isDragging ? 'dragging' : ''}`}
-                            >
-                              <div className="kanban-task-header">
-                                <h4>{task.title}</h4>
-                                <div className="kanban-task-actions">
-                                  <button
-                                    onClick={() => onEdit(task)}
-                                    className="btn-icon"
-                                    title="Edit"
-                                  >
-                                    ✏️
-                                  </button>
-                                  <button
-                                    onClick={() => onDelete(task.id)}
-                                    className="btn-icon btn-danger"
-                                    title="Delete"
-                                  >
-                                    🗑️
-                                  </button>
+    <>
+      <style>{`
+        /* Custom drag preview styling for @hello-pangea/dnd */
+        [data-rbd-drag-handle-draggable-id] {
+          cursor: grab !important;
+        }
+        [data-rbd-drag-handle-draggable-id]:active {
+          cursor: grabbing !important;
+        }
+        
+        /* Style the drag preview portal */
+        [data-rbd-drag-handle-context-id] > div {
+          transform: rotate(2deg) scale(1.05) !important;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(74, 158, 255, 0.6) !important;
+          opacity: 0.98 !important;
+          backdrop-filter: blur(12px) !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+          border: 2px solid rgba(74, 158, 255, 0.6) !important;
+        }
+      `}</style>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[600px]">
+          {columns.map((column) => {
+            const columnTasks = getTasksForColumn(column.status);
+
+            return (
+              <div key={column.id} className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col min-h-full transition-all">
+                <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
+                  <h3 className="text-lg font-semibold text-[#e0e0e0]">{column.title}</h3>
+                  <span className="px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-semibold text-[#e0e0e0]">
+                    {columnTasks.length}
+                  </span>
+                </div>
+                <Droppable droppableId={column.id}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`flex-1 overflow-y-auto min-h-0 pr-1 transition-all duration-200 ${snapshot.isDraggingOver
+                          ? 'bg-blue-500/20 border-2 border-blue-500/60 border-dashed rounded-lg p-2'
+                          : ''
+                        }`}
+                    >
+                      {columnTasks.length === 0 ? (
+                        <div className={`text-center text-sm py-8 transition-all ${snapshot.isDraggingOver
+                            ? 'text-blue-400 font-medium'
+                            : 'text-gray-500'
+                          }`}>
+                          {snapshot.isDraggingOver ? 'Drop task here' : 'No tasks'}
+                        </div>
+                      ) : (
+                        columnTasks.map((task, index) => (
+                          <Draggable key={task.id} draggableId={String(task.id)} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  ...(snapshot.isDragging && {
+                                    opacity: 0.4,
+                                  }),
+                                }}
+                                className={`relative backdrop-blur-sm bg-white/5 border border-white/10 rounded-lg p-4 mb-3 cursor-grab active:cursor-grabbing transition-all hover:bg-white/10 hover:shadow-lg ${snapshot.isDragging
+                                    ? 'shadow-2xl'
+                                    : ''
+                                  }`}
+                              >
+                                <div className="flex justify-between items-start gap-2 mb-2">
+                                  <h4 className="text-base font-semibold text-[#e0e0e0] flex-1 leading-tight">{task.title}</h4>
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEdit(task);
+                                      }}
+                                      className="p-1.5 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
+                                      title="Edit"
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDelete(task.id);
+                                      }}
+                                      className="p-1.5 bg-white/5 border border-red-500/20 rounded hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                                      title="Delete"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
+                                </div>
+                                {task.description && (
+                                  <p className="text-sm text-gray-400 mb-3 line-clamp-2">{task.description}</p>
+                                )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {task.due_date && (
+                                    <span className="text-xs text-gray-500">
+                                      Due {new Date(task.due_date).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {task.priority && (
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${task.priority === 'high'
+                                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                      : task.priority === 'medium'
+                                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                      }`}>
+                                      {formatPriority(task.priority)}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                              {task.description && (
-                                <p className="kanban-task-description">{task.description}</p>
-                              )}
-                              <div className="kanban-task-meta">
-                                {task.due_date && (
-                                  <span className="kanban-task-due-date">
-                                    Due {new Date(task.due_date).toLocaleDateString()}
-                                  </span>
-                                )}
-                                {task.priority && (
-                                  <span className={`priority-badge ${getPriorityClass(task.priority)}`}>
-                                    {formatPriority(task.priority)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </Draggable>
-                      ))
-                    )}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </div>
-          );
-        })}
-      </div>
-    </DragDropContext>
+                            )}
+                          </Draggable>
+                        ))
+                      )}
+                      {provided.placeholder && (
+                        <div
+                          className={`rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 mb-3 transition-all duration-200 ${snapshot.isDraggingOver ? 'min-h-[80px]' : 'h-0 border-transparent bg-transparent'
+                            }`}
+                          style={{
+                            minHeight: snapshot.isDraggingOver ? '80px' : '0',
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </Droppable>
+              </div>
+            );
+          })}
+        </div>
+      </DragDropContext>
+    </>
   );
 }
 

@@ -9,6 +9,8 @@ import Dashboard from './components/Dashboard';
 import ProjectDetail from './components/ProjectDetail';
 import EmailConfirmation from './components/EmailConfirmation';
 import Profile from './components/Profile';
+import LandingPage from './components/LandingPage';
+import Solutions from './components/Solutions';
 import './App.css';
 
 interface Session {
@@ -27,7 +29,7 @@ function App() {
     checkAuth();
     const authStateChange = authService.onAuthStateChange((event: string, session: Session | null) => {
       if (!initialCheckComplete.current) return;
-      
+
       if (session) {
         setUser(session.user);
         setEmailConfirmed(!!session.user?.email_confirmed_at);
@@ -112,7 +114,7 @@ function App() {
                   <EmailConfirmation />
                 )
               ) : (
-                <Navigate to="/login" replace />
+                <LandingPage />
               )
             }
           />
@@ -133,6 +135,10 @@ function App() {
           <Route
             path="/u/:username"
             element={<Profile />}
+          />
+          <Route
+            path="/solutions"
+            element={<Solutions />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
