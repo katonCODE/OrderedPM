@@ -3,7 +3,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
+const createAIRateLimiter = require('../middleware/rateLimit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const aiRateLimiter = createAIRateLimiter();
 
 // Get all tasks for a project
 router.get('/project/:projectId', authenticateToken, async (req, res) => {
@@ -20,18 +23,18 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
 
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
-    
+
     // Validate limit and offset
     const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
     const validOffset = Math.max(0, offset);
-    
+
     // Get total count for pagination metadata
     const countResult = await pool.query(
       'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND user_id = $2',
       [req.params.projectId, req.userId]
     );
     const total = parseInt(countResult.rows[0].count);
-    
+
     // Get paginated tasks, ordered by position (for Kanban) then created_at
     const result = await pool.query(
       'SELECT * FROM tasks WHERE project_id = $1 AND user_id = $2 ORDER BY COALESCE(position, 0) ASC, created_at DESC LIMIT $3 OFFSET $4',
@@ -73,7 +76,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // Generate task using AI
-router.post('/ai/generate', authenticateToken, async (req, res) => {
+router.post('/ai/generate', authenticateToken, aiRateLimiter, async (req, res) => {
   try {
     const { prompt, project_id } = req.body;
 
@@ -200,8 +203,8 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const validStatus = status && ['todo', 'in_progress', 'done'].includes(status) 
-      ? status 
+    const validStatus = status && ['todo', 'in_progress', 'done'].includes(status)
+      ? status
       : 'todo';
 
     const validPriority = priority && ['low', 'medium', 'high'].includes(priority)
@@ -284,7 +287,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // Handle fractional indexing for position updates
     if (prevPosition !== undefined || nextPosition !== undefined) {
       let newPosition;
-      
+
       if (prevPosition === null && nextPosition === null) {
         // Empty column - set to default starting position
         newPosition = 10000;
@@ -298,7 +301,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         // Dropped between two tasks: new position = (prevPosition + nextPosition) / 2
         newPosition = (prevPosition + nextPosition) / 2;
       }
-      
+
       updatedPosition = newPosition;
     } else if (req.body.position !== undefined) {
       // Fallback: direct position assignment (for backward compatibility)
