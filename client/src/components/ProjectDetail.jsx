@@ -1,8 +1,9 @@
 // client/src/components/ProjectDetail.js
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
+import { exportProjectData } from '../utils/export';
 import KanbanBoard from './KanbanBoard';
 import MiniCalendar from './MiniCalendar';
 import Timeline from './Timeline';
@@ -20,6 +21,8 @@ function ProjectDetail() {
   const [showAITaskForm, setShowAITaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef(null);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', id],
@@ -37,6 +40,24 @@ function ProjectDetail() {
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 0);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
 
   const handleCreateTask = async (taskData) => {
     try {
@@ -319,31 +340,88 @@ function ProjectDetail() {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 md:py-8">
+      <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10 overflow-visible">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 md:py-8 overflow-visible">
           <button
             onClick={() => navigate('/dashboard')}
             className="mb-4 text-blue-400 hover:text-blue-300 transition-colors font-medium flex items-center gap-2"
           >
             ← Back to Projects
           </button>
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">
-              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                {project.name}
-              </span>
-            </h1>
-            {project.description && (
-              <p className="text-gray-400 text-base md:text-lg leading-relaxed">
-                {project.description}
-              </p>
+          <div className="flex justify-between items-start gap-4">
+            <div className="flex-1">
+              <h1 className="text-3xl md:text-4xl font-bold mb-2">
+                <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  {project.name}
+                </span>
+              </h1>
+              {project.description && (
+                <p className="text-gray-400 text-base md:text-lg leading-relaxed">
+                  {project.description}
+                </p>
+              )}
+            </div>
+            {project && (
+              <div className="relative z-[100]" ref={exportMenuRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowExportMenu(!showExportMenu);
+                  }}
+                  className="px-4 py-2 bg-white/5 border border-white/10 text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all flex items-center gap-2"
+                  title="Export project data"
+                >
+                  📥 Export
+                </button>
+                {showExportMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-48 bg-[#252525] border border-white/10 rounded-lg shadow-xl z-[200] overflow-visible"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{ position: 'absolute', zIndex: 200 }}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (project) {
+                          exportProjectData(project, tasks || [], 'csv');
+                          setShowExportMenu(false);
+                        }
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="w-full text-left px-4 py-2.5 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-t-lg cursor-pointer relative z-[201] block"
+                      style={{ position: 'relative', zIndex: 201, pointerEvents: 'auto' }}
+                    >
+                      Export as CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (project) {
+                          exportProjectData(project, tasks || [], 'json');
+                          setShowExportMenu(false);
+                        }
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="w-full text-left px-4 py-2.5 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-b-lg cursor-pointer relative z-[201] block"
+                      style={{ position: 'relative', zIndex: 201, pointerEvents: 'auto' }}
+                    >
+                      Export as JSON
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
+      <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">Mission Control</h2>
           <button

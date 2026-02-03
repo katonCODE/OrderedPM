@@ -5,6 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
 import { getMyProfile } from '../services/profile';
 import { authService } from '../services/auth';
+import { exportAllData } from '../utils/export';
+import { parseJSONFile, parseCSVFile, extractProjectsFromJSON, extractProjectsFromCSV, extractTasksFromJSON, extractTasksFromCSV, validateProjectData, validateTaskData } from '../utils/import';
 import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
 import ConfirmDialog from './ConfirmDialog';
@@ -21,6 +23,9 @@ function Dashboard({ onLogout }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [sortBy, setSortBy] = useState('updated');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importSuccess, setImportSuccess] = useState('');
   const itemsPerPage = 15;
 
   const { data: profile } = useQuery({
@@ -197,6 +202,93 @@ function Dashboard({ onLogout }) {
     }
   };
 
+  const handleImportFile = async (file) => {
+    setImporting(true);
+    setImportError('');
+    setImportSuccess('');
+
+    try {
+      const isJSON = file.name.endsWith('.json');
+      const isCSV = file.name.endsWith('.csv');
+
+      if (!isJSON && !isCSV) {
+        throw new Error('Please select a JSON or CSV file');
+      }
+
+      let projects = [];
+      let tasksData = null;
+
+      if (isJSON) {
+        const data = await parseJSONFile(file);
+        projects = extractProjectsFromJSON(data);
+        tasksData = data;
+      } else {
+        const csvData = await parseCSVFile(file);
+        const hasProjectColumns = csvData.headers.some(h =>
+          h.toLowerCase().includes('project name') || h.toLowerCase() === 'name'
+        );
+
+        if (hasProjectColumns) {
+          projects = extractProjectsFromCSV(csvData);
+        } else {
+          throw new Error('CSV file must contain project data. Please import a projects CSV file, or use JSON format which includes both projects and tasks.');
+        }
+      }
+
+      if (projects.length === 0) {
+        throw new Error('No projects found in file');
+      }
+
+      let createdCount = 0;
+      let taskCount = 0;
+
+      for (const projectData of projects) {
+        try {
+          const validatedProject = validateProjectData(projectData);
+          const newProject = await projectsAPI.create(validatedProject);
+          createdCount++;
+
+          if (isJSON && tasksData) {
+            const projectTasks = extractTasksFromJSON(tasksData, newProject.id, projectData.name);
+            for (const taskData of projectTasks) {
+              try {
+                const validatedTask = validateTaskData({ ...taskData, project_id: newProject.id });
+                await tasksAPI.create(validatedTask);
+                taskCount++;
+              } catch (taskError) {
+                console.error('Error creating task:', taskError);
+              }
+            }
+          }
+        } catch (projectError) {
+          console.error('Error creating project:', projectError);
+          throw new Error(`Failed to create project "${projectData.name}": ${projectError.message}`);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+      setCurrentPage(1);
+      setImportSuccess(`Successfully imported ${createdCount} project(s)${taskCount > 0 ? ` with ${taskCount} task(s)` : ''}!`);
+
+      setTimeout(() => {
+        setImportSuccess('');
+      }, 5000);
+    } catch (error) {
+      setImportError(error.message || 'Failed to import file. Please check the file format.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImportFile(file);
+    }
+    e.target.value = '';
+  };
+
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
       {/* Background gradient effects */}
@@ -252,13 +344,68 @@ function Dashboard({ onLogout }) {
       <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">My Projects</h2>
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
-          >
-            + New Project
-          </button>
+          <div className="flex gap-3">
+            {allProjects.length > 0 && (
+              <div className="relative group">
+                <button
+                  className="px-4 py-3 bg-white/5 border border-white/10 text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all flex items-center gap-2"
+                  title="Export data"
+                >
+                  📥 Export Current Projects
+                </button>
+                <div className="absolute right-0 mt-2 w-48 bg-[#252525] border border-white/10 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                  <button
+                    onClick={() => exportAllData(allProjects, allTasks, 'csv')}
+                    className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-t-lg"
+                  >
+                    Export as CSV
+                  </button>
+                  <button
+                    onClick={() => exportAllData(allProjects, allTasks, 'json')}
+                    className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-b-lg"
+                  >
+                    Export as JSON
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="relative">
+              <input
+                type="file"
+                accept=".json,.csv"
+                onChange={handleFileInputChange}
+                className="hidden"
+                id="import-file-input"
+                disabled={importing}
+              />
+              <label
+                htmlFor="import-file-input"
+                className={`px-4 py-3 bg-white/5 border border-white/10 text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all flex items-center gap-2 cursor-pointer ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Import projects from JSON or CSV"
+              >
+                {importing ? '⏳ Importing...' : '📤 Import Projects'}
+              </label>
+            </div>
+            <button
+              onClick={() => setShowForm(true)}
+              className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+            >
+              + New Project
+            </button>
+          </div>
         </div>
+
+        {importError && (
+          <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
+            {importError}
+          </div>
+        )}
+
+        {importSuccess && (
+          <div className="mb-6 px-4 py-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400">
+            {importSuccess}
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
@@ -332,8 +479,8 @@ function Dashboard({ onLogout }) {
                         setCurrentPage(1);
                       }}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f
-                          ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                          : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                        ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                         }`}
                     >
                       {f.charAt(0).toUpperCase() + f.slice(1)}
