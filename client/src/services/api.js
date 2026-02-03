@@ -9,12 +9,12 @@ let refreshPromise = null;
 
 const getAuthHeaders = () => {
   const token = getAccessToken();
-  
+
   const headers = {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
   };
-  
+
   return headers;
 };
 
@@ -22,7 +22,7 @@ const refreshToken = async () => {
   if (isRefreshing) {
     return refreshPromise;
   }
-  
+
   isRefreshing = true;
   refreshPromise = authService.refreshSession()
     .then((session) => {
@@ -36,7 +36,7 @@ const refreshToken = async () => {
       clearTokens();
       throw error;
     });
-  
+
   return refreshPromise;
 };
 
@@ -48,10 +48,10 @@ const handleResponse = async (response, originalRequest) => {
       error.originalRequest = originalRequest;
       throw error;
     }
-    
+
     const contentType = response.headers.get('content-type');
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-    
+
     try {
       if (contentType && contentType.includes('application/json')) {
         const error = await response.json();
@@ -65,15 +65,15 @@ const handleResponse = async (response, originalRequest) => {
     } catch (parseError) {
       // If parsing fails, use the status-based message
     }
-    
+
     throw new Error(errorMessage);
   }
-  
+
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
     return response.json();
   }
-  
+
   const text = await response.text();
   return text ? text : null;
 };
@@ -84,15 +84,15 @@ const fetchWithAuth = async (url, options = {}) => {
       ...getAuthHeaders(),
       ...options.headers,
     };
-    
+
     const response = await fetch(url, {
       ...options,
       headers,
     });
-    
+
     return handleResponse(response, { url, options });
   };
-  
+
   try {
     return await makeRequest();
   } catch (error) {
@@ -133,7 +133,7 @@ export const projectsAPI = {
       if (limit !== undefined) params.append('limit', limit.toString());
       if (offset !== undefined) params.append('offset', offset.toString());
       if (includeCount) params.append('includeCount', 'true');
-      
+
       const url = `${API_URL}/api/projects${params.toString() ? `?${params.toString()}` : ''}`;
       return await fetchWithAuth(url);
     } catch (error) {
@@ -199,13 +199,24 @@ export const projectsAPI = {
 
 // Tasks API
 export const tasksAPI = {
+  getAllForUser: async () => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/user/all`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
   getByProject: async (projectId, options = {}) => {
     try {
       const { limit = 50, offset = 0 } = options;
       const params = new URLSearchParams();
       if (limit !== undefined) params.append('limit', limit.toString());
       if (offset !== undefined) params.append('offset', offset.toString());
-      
+
       const url = `${API_URL}/api/tasks/project/${projectId}${params.toString() ? `?${params.toString()}` : ''}`;
       return await fetchWithAuth(url);
     } catch (error) {

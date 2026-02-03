@@ -53,7 +53,7 @@ function Profile() {
     return (
       <div className="error-container">
         <p>{error.message || 'Failed to load profile'}</p>
-        <button onClick={() => navigate('/')} className="btn-primary">
+        <button onClick={() => navigate('/dashboard')} className="btn-primary">
           Back to Dashboard
         </button>
       </div>
@@ -64,7 +64,7 @@ function Profile() {
     return (
       <div className="error-container">
         <p>Profile not found</p>
-        <button onClick={() => navigate('/')} className="btn-primary">
+        <button onClick={() => navigate('/dashboard')} className="btn-primary">
           Back to Dashboard
         </button>
       </div>
@@ -74,7 +74,7 @@ function Profile() {
   return (
     <div className="profile-page">
       <div className="profile-header">
-        <button onClick={() => navigate('/')} className="btn-back">
+        <button onClick={() => navigate('/dashboard')} className="btn-back">
           ← Back to Dashboard
         </button>
       </div>
@@ -82,8 +82,8 @@ function Profile() {
       <div className="profile-content">
         <div className="profile-avatar-section">
           {profile.avatar_url ? (
-            <img 
-              src={profile.avatar_url} 
+            <img
+              src={profile.avatar_url}
               alt={profile.full_name || profile.username}
               className="profile-avatar-large"
             />
@@ -99,7 +99,7 @@ function Profile() {
             {profile.full_name || profile.username}
           </h1>
           <p className="profile-username">@{profile.username}</p>
-          
+
           {profile.bio && (
             <div className="profile-bio">
               <p>{profile.bio}</p>

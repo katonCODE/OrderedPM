@@ -8,6 +8,23 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const aiRateLimiter = createAIRateLimiter();
 
+// Get all tasks for the authenticated user (for dashboard stats)
+router.get('/user/all', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM tasks WHERE user_id = $1',
+      [req.userId]
+    );
+
+    res.json({
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching user tasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get all tasks for a project
 router.get('/project/:projectId', authenticateToken, async (req, res) => {
   try {

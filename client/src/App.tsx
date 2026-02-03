@@ -101,11 +101,21 @@ function App() {
           <Route
             path="/login"
             element={
-              user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />
+              user ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} />
             }
           />
           <Route
             path="/"
+            element={
+              user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <LandingPage />
+              )
+            }
+          />
+          <Route
+            path="/dashboard"
             element={
               user ? (
                 emailConfirmed ? (
@@ -114,7 +124,7 @@ function App() {
                   <EmailConfirmation />
                 )
               ) : (
-                <LandingPage />
+                <Navigate to="/login" replace />
               )
             }
           />
@@ -140,7 +150,7 @@ function App() {
             path="/solutions"
             element={<Solutions />}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} replace />} />
         </Routes>
       </div>
     </Router>

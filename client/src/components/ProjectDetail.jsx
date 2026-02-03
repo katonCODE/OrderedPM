@@ -301,7 +301,7 @@ function ProjectDetail() {
       <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center px-6">
         <p className="text-red-400 text-lg mb-6">Project not found</p>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
         >
           Back to Dashboard
@@ -322,7 +322,7 @@ function ProjectDetail() {
       <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 md:py-8">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="mb-4 text-blue-400 hover:text-blue-300 transition-colors font-medium flex items-center gap-2"
           >
             ← Back to Projects
