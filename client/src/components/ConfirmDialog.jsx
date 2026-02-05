@@ -105,7 +105,11 @@ function ConfirmDialog({
                 onClick={handleConfirm}
                 className={`px-6 py-3 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${confirmButtonClass === 'btn-danger'
                     ? 'bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30'
-                    : 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] hover:from-yellow-300 hover:to-yellow-400 shadow-lg shadow-yellow-500/20'
+                    : confirmButtonClass === 'btn-warning'
+                      ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/30'
+                      : confirmButtonClass === 'btn-success'
+                        ? 'bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30'
+                        : 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] hover:from-yellow-300 hover:to-yellow-400 shadow-lg shadow-yellow-500/20'
                   }`}
                 disabled={isLoading}
                 aria-label={confirmText}

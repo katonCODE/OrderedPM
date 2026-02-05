@@ -128,11 +128,12 @@ export const authAPI = {
 export const projectsAPI = {
   getAll: async (options = {}) => {
     try {
-      const { limit = 20, offset = 0, includeCount = false } = options;
+      const { limit = 20, offset = 0, includeCount = false, includeArchived = false } = options;
       const params = new URLSearchParams();
       if (limit !== undefined) params.append('limit', limit.toString());
       if (offset !== undefined) params.append('offset', offset.toString());
       if (includeCount) params.append('includeCount', 'true');
+      if (includeArchived) params.append('includeArchived', 'true');
 
       const url = `${API_URL}/api/projects${params.toString() ? `?${params.toString()}` : ''}`;
       return await fetchWithAuth(url);
@@ -187,6 +188,32 @@ export const projectsAPI = {
     try {
       return await fetchWithAuth(`${API_URL}/api/projects/${id}`, {
         method: 'DELETE',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  archive: async (id) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/archive`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  unarchive: async (id) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/unarchive`, {
+        method: 'POST',
       });
     } catch (error) {
       if (error instanceof TypeError && error.message.includes('fetch')) {

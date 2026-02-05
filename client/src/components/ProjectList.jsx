@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
-function ProjectList({ projects, allTasks = [], onEdit, onDelete }) {
+function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onRestore, showArchived = false }) {
   const getProjectStats = (projectId) => {
     const projectTasks = allTasks.filter(t => t.project_id === projectId);
     const totalTasks = projectTasks.length;
@@ -38,9 +38,17 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete }) {
         return (
           <div
             key={project.id}
-            className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all group"
+            className={`relative backdrop-blur-xl bg-white/5 border rounded-xl p-6 hover:bg-white/10 transition-all group ${project.archived
+                ? 'border-gray-600/30 opacity-75'
+                : 'border-white/10'
+              }`}
           >
-            {stats.overdueTasks > 0 && (
+            {project.archived && (
+              <div className="absolute top-3 right-3 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-xs text-gray-400 font-medium">
+                Archived
+              </div>
+            )}
+            {!project.archived && stats.overdueTasks > 0 && (
               <div className="absolute top-3 right-3 px-2 py-1 bg-red-500/20 border border-red-500/30 rounded text-xs text-red-400 font-medium">
                 {stats.overdueTasks} overdue
               </div>
@@ -63,20 +71,51 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete }) {
                   </Link>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => onEdit(project)}
-                    className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
-                    title="Edit"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => onDelete(project.id)}
-                    className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
-                    title="Delete"
-                  >
-                    🗑️
-                  </button>
+                  {!project.archived && (
+                    <>
+                      <button
+                        onClick={() => onEdit(project)}
+                        className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
+                        title="Edit"
+                      >
+                        ✏️
+                      </button>
+                      {onArchive && (
+                        <button
+                          onClick={() => onArchive(project.id)}
+                          className="p-2 bg-white/5 border border-yellow-500/20 rounded-lg hover:bg-yellow-500/10 transition-all text-gray-400 hover:text-yellow-400"
+                          title="Archive"
+                        >
+                          📦
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onDelete(project.id)}
+                        className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                        title="Delete"
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
+                  {project.archived && onRestore && (
+                    <>
+                      <button
+                        onClick={() => onRestore(project.id)}
+                        className="p-2 bg-white/5 border border-green-500/20 rounded-lg hover:bg-green-500/10 transition-all text-gray-400 hover:text-green-400"
+                        title="Restore"
+                      >
+                        ♻️
+                      </button>
+                      <button
+                        onClick={() => onDelete(project.id)}
+                        className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                        title="Delete Permanently"
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -350,11 +350,18 @@ function ProjectDetail() {
           </button>
           <div className="flex justify-between items-start gap-4">
             <div className="flex-1">
-              <h1 className="text-3xl md:text-4xl font-bold mb-2">
-                <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  {project.name}
-                </span>
-              </h1>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl md:text-4xl font-bold">
+                  <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    {project.name}
+                  </span>
+                </h1>
+                {project.archived && (
+                  <span className="px-3 py-1 bg-gray-500/20 border border-gray-500/30 rounded-lg text-xs text-gray-400 font-medium">
+                    Archived
+                  </span>
+                )}
+              </div>
               {project.description && (
                 <p className="text-gray-400 text-base md:text-lg leading-relaxed">
                   {project.description}

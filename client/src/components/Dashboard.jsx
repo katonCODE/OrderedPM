@@ -19,10 +19,13 @@ function Dashboard({ onLogout }) {
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, projectId: null });
+  const [archiveConfirm, setArchiveConfirm] = useState({ isOpen: false, projectId: null });
+  const [restoreConfirm, setRestoreConfirm] = useState({ isOpen: false, projectId: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [sortBy, setSortBy] = useState('updated');
+  const [showArchived, setShowArchived] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
@@ -38,11 +41,12 @@ function Dashboard({ onLogout }) {
   });
 
   const { data: projectsData, isFetching, isLoading: initialLoading, error: queryError } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', showArchived],
     queryFn: () => projectsAPI.getAll({
       limit: 1000,
       offset: 0,
-      includeCount: false
+      includeCount: false,
+      includeArchived: showArchived
     }),
     placeholderData: (previousData) => previousData,
   });
@@ -59,15 +63,25 @@ function Dashboard({ onLogout }) {
   const error = queryError?.message || '';
 
   const stats = useMemo(() => {
-    const totalProjects = allProjects.length;
-    const activeTasks = allTasks.filter(t => t.status === 'todo' || t.status === 'in_progress').length;
+    // Only count non-archived projects in stats
+    const activeProjects = allProjects.filter(p => !p.archived);
+    const totalProjects = showArchived ? allProjects.length : activeProjects.length;
+
+    // Only count tasks from non-archived projects
+    const activeProjectIds = new Set(activeProjects.map(p => p.id));
+    const activeTasks = allTasks.filter(t =>
+      activeProjectIds.has(t.project_id) && (t.status === 'todo' || t.status === 'in_progress')
+    ).length;
     const overdueTasks = allTasks.filter(t => {
-      if (!t.due_date || t.status === 'done') return false;
+      if (!t.due_date || t.status === 'done' || !activeProjectIds.has(t.project_id)) return false;
       return new Date(t.due_date) < new Date();
     }).length;
-    const doneTasks = allTasks.filter(t => t.status === 'done').length;
-    const completionRate = allTasks.length > 0
-      ? Math.round((doneTasks / allTasks.length) * 100)
+    const doneTasks = allTasks.filter(t =>
+      activeProjectIds.has(t.project_id) && t.status === 'done'
+    ).length;
+    const relevantTasks = allTasks.filter(t => activeProjectIds.has(t.project_id));
+    const completionRate = relevantTasks.length > 0
+      ? Math.round((doneTasks / relevantTasks.length) * 100)
       : 0;
 
     return {
@@ -76,10 +90,17 @@ function Dashboard({ onLogout }) {
       overdueTasks,
       completionRate
     };
-  }, [allProjects, allTasks]);
+  }, [allProjects, allTasks, showArchived]);
 
   const filteredAndSortedProjects = useMemo(() => {
     let filtered = [...allProjects];
+
+    // Filter by archived status based on showArchived state
+    if (!showArchived) {
+      filtered = filtered.filter(p => !p.archived);
+    } else {
+      filtered = filtered.filter(p => p.archived);
+    }
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -184,6 +205,53 @@ function Dashboard({ onLogout }) {
 
   const handleDeleteCancel = () => {
     setDeleteConfirm({ isOpen: false, projectId: null });
+  };
+
+  const handleArchiveClick = (id) => {
+    setArchiveConfirm({ isOpen: true, projectId: id });
+  };
+
+  const handleArchiveConfirm = async () => {
+    const { projectId } = archiveConfirm;
+    if (!projectId) return;
+
+    try {
+      await projectsAPI.archive(projectId);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+      setArchiveConfirm({ isOpen: false, projectId: null });
+      if (paginatedProjects.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      }
+    } catch (err) {
+      setArchiveConfirm({ isOpen: false, projectId: null });
+    }
+  };
+
+  const handleArchiveCancel = () => {
+    setArchiveConfirm({ isOpen: false, projectId: null });
+  };
+
+  const handleRestoreClick = (id) => {
+    setRestoreConfirm({ isOpen: true, projectId: id });
+  };
+
+  const handleRestoreConfirm = async () => {
+    const { projectId } = restoreConfirm;
+    if (!projectId) return;
+
+    try {
+      await projectsAPI.unarchive(projectId);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+      setRestoreConfirm({ isOpen: false, projectId: null });
+    } catch (err) {
+      setRestoreConfirm({ isOpen: false, projectId: null });
+    }
+  };
+
+  const handleRestoreCancel = () => {
+    setRestoreConfirm({ isOpen: false, projectId: null });
   };
 
   const handleEditClick = (project) => {
@@ -470,7 +538,7 @@ function Dashboard({ onLogout }) {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {['all', 'active', 'recent'].map((f) => (
                     <button
                       key={f}
@@ -486,6 +554,18 @@ function Dashboard({ onLogout }) {
                       {f.charAt(0).toUpperCase() + f.slice(1)}
                     </button>
                   ))}
+                  <button
+                    onClick={() => {
+                      setShowArchived(!showArchived);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${showArchived
+                      ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
+                      : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                      }`}
+                  >
+                    {showArchived ? '📦 Archived' : '📁 Active'}
+                  </button>
                 </div>
                 <select
                   value={sortBy}
@@ -509,6 +589,9 @@ function Dashboard({ onLogout }) {
               allTasks={allTasks}
               onEdit={handleEditClick}
               onDelete={handleDeleteClick}
+              onArchive={handleArchiveClick}
+              onRestore={handleRestoreClick}
+              showArchived={showArchived}
             />
             {totalPages > 1 && (
               <div className="mt-8">
@@ -531,10 +614,30 @@ function Dashboard({ onLogout }) {
           onClose={handleDeleteCancel}
           onConfirm={handleDeleteConfirm}
           title="Delete Project"
-          message="Are you sure you want to delete this project? All tasks will be deleted too. This action cannot be undone."
+          message="Are you sure you want to permanently delete this project? All tasks will be deleted too. This action cannot be undone."
           confirmText="Delete"
           cancelText="Cancel"
           confirmButtonClass="btn-danger"
+        />
+        <ConfirmDialog
+          isOpen={archiveConfirm.isOpen}
+          onClose={handleArchiveCancel}
+          onConfirm={handleArchiveConfirm}
+          title="Archive Project"
+          message="Are you sure you want to archive this project? You can restore it later from the archived projects view."
+          confirmText="Archive"
+          cancelText="Cancel"
+          confirmButtonClass="btn-warning"
+        />
+        <ConfirmDialog
+          isOpen={restoreConfirm.isOpen}
+          onClose={handleRestoreCancel}
+          onConfirm={handleRestoreConfirm}
+          title="Restore Project"
+          message="Are you sure you want to restore this project? It will be moved back to your active projects."
+          confirmText="Restore"
+          cancelText="Cancel"
+          confirmButtonClass="btn-success"
         />
       </main>
     </div>
