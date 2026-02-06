@@ -45,21 +45,52 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
     const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
     const validOffset = Math.max(0, offset);
 
-    // Get total count for pagination metadata
+    // Get total count for pagination metadata (only top-level tasks)
     const countResult = await pool.query(
-      'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND user_id = $2',
+      'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND user_id = $2 AND parent_task_id IS NULL',
       [req.params.projectId, req.userId]
     );
     const total = parseInt(countResult.rows[0].count);
 
-    // Get paginated tasks, ordered by position (for Kanban) then created_at
+    // Get paginated top-level tasks, ordered by position (for Kanban) then created_at
     const result = await pool.query(
-      'SELECT * FROM tasks WHERE project_id = $1 AND user_id = $2 ORDER BY COALESCE(position, 0) ASC, created_at DESC LIMIT $3 OFFSET $4',
+      `SELECT 
+        t.*,
+        COUNT(st.id) FILTER (WHERE st.status = 'done') as completed_subtasks,
+        COUNT(st.id) as total_subtasks
+      FROM tasks t
+      LEFT JOIN tasks st ON st.parent_task_id = t.id AND st.user_id = t.user_id
+      WHERE t.project_id = $1 AND t.user_id = $2 AND t.parent_task_id IS NULL
+      GROUP BY t.id
+      ORDER BY COALESCE(t.position, 0) ASC, t.created_at DESC
+      LIMIT $3 OFFSET $4`,
       [req.params.projectId, req.userId, validLimit, validOffset]
     );
 
+    // Get all subtasks for the returned tasks
+    const parentTaskIds = result.rows.map(task => task.id);
+    let subtasks = [];
+    if (parentTaskIds.length > 0) {
+      const subtasksResult = await pool.query(
+        'SELECT * FROM tasks WHERE parent_task_id = ANY($1) AND user_id = $2 ORDER BY created_at ASC',
+        [parentTaskIds, req.userId]
+      );
+      subtasks = subtasksResult.rows;
+    }
+
+    // Group subtasks under their parents
+    const tasksWithSubtasks = result.rows.map(task => {
+      const taskSubtasks = subtasks.filter(st => st.parent_task_id === task.id);
+      return {
+        ...task,
+        completed_subtasks: parseInt(task.completed_subtasks) || 0,
+        total_subtasks: parseInt(task.total_subtasks) || 0,
+        subtasks: taskSubtasks
+      };
+    });
+
     res.json({
-      data: result.rows,
+      data: tasksWithSubtasks,
       pagination: {
         total,
         limit: validLimit,
@@ -77,7 +108,14 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
+      `SELECT 
+        t.*,
+        COUNT(st.id) FILTER (WHERE st.status = 'done') as completed_subtasks,
+        COUNT(st.id) as total_subtasks
+      FROM tasks t
+      LEFT JOIN tasks st ON st.parent_task_id = t.id AND st.user_id = t.user_id
+      WHERE t.id = $1 AND t.user_id = $2
+      GROUP BY t.id`,
       [req.params.id, req.userId]
     );
 
@@ -85,9 +123,49 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    res.json(result.rows[0]);
+    const task = result.rows[0];
+
+    // Get subtasks
+    const subtasksResult = await pool.query(
+      'SELECT * FROM tasks WHERE parent_task_id = $1 AND user_id = $2 ORDER BY created_at ASC',
+      [req.params.id, req.userId]
+    );
+
+    res.json({
+      ...task,
+      completed_subtasks: parseInt(task.completed_subtasks) || 0,
+      total_subtasks: parseInt(task.total_subtasks) || 0,
+      subtasks: subtasksResult.rows
+    });
   } catch (error) {
     console.error('Error fetching task:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get subtasks for a task
+router.get('/:id/subtasks', authenticateToken, async (req, res) => {
+  try {
+    // Verify parent task exists and belongs to user
+    const parentTask = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+
+    if (parentTask.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const result = await pool.query(
+      'SELECT * FROM tasks WHERE parent_task_id = $1 AND user_id = $2 ORDER BY created_at ASC',
+      [req.params.id, req.userId]
+    );
+
+    res.json({
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching subtasks:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -200,20 +278,39 @@ Return only the JSON object, nothing else.`;
 // Create a new task
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { project_id, title, description, status, start_date, due_date, priority } = req.body;
+    const { project_id, title, description, status, start_date, due_date, priority, parent_task_id } = req.body;
 
-    if (!project_id) {
-      return res.status(400).json({ error: 'Project ID is required' });
+    if (!project_id && !parent_task_id) {
+      return res.status(400).json({ error: 'Either Project ID or Parent Task ID is required' });
     }
 
     if (!title || title.trim() === '') {
       return res.status(400).json({ error: 'Task title is required' });
     }
 
+    let projectId = project_id;
+    let parentTaskId = parent_task_id || null;
+
+    // If parent_task_id is provided, verify it exists and get its project_id
+    if (parent_task_id) {
+      const parentTask = await pool.query(
+        'SELECT project_id FROM tasks WHERE id = $1 AND user_id = $2',
+        [parent_task_id, req.userId]
+      );
+
+      if (parentTask.rows.length === 0) {
+        return res.status(404).json({ error: 'Parent task not found' });
+      }
+
+      projectId = parentTask.rows[0].project_id;
+      // Ensure parent_task_id is set
+      parentTaskId = parent_task_id;
+    }
+
     // Verify the project belongs to the user
     const projectCheck = await pool.query(
       'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
-      [project_id, req.userId]
+      [projectId, req.userId]
     );
 
     if (projectCheck.rows.length === 0) {
@@ -229,8 +326,8 @@ router.post('/', authenticateToken, async (req, res) => {
       : 'medium';
 
     const result = await pool.query(
-      'INSERT INTO tasks (project_id, user_id, title, description, status, start_date, due_date, priority) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-      [project_id, req.userId, title.trim(), description?.trim() || null, validStatus, start_date || null, due_date || null, validPriority]
+      'INSERT INTO tasks (project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      [projectId, req.userId, title.trim(), description?.trim() || null, validStatus, start_date || null, due_date || null, validPriority, parentTaskId]
     );
 
     res.status(201).json(result.rows[0]);
@@ -254,7 +351,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const { title, description, status, start_date, due_date, priority, prevPosition, nextPosition } = req.body;
+    const { title, description, status, start_date, due_date, priority, prevPosition, nextPosition, parent_task_id } = req.body;
 
     // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
     let updatedTitle = null;
@@ -264,6 +361,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     let updatedDueDate = null;
     let updatedPriority = null;
     let updatedPosition = null;
+    let updatedParentTaskId = null;
 
     if (title !== undefined) {
       const trimmedTitle = title.trim();
@@ -301,6 +399,31 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    // Handle parent_task_id update
+    if (parent_task_id !== undefined) {
+      if (parent_task_id === null) {
+        // Removing parent (making it a top-level task)
+        updatedParentTaskId = null;
+      } else {
+        // Verify parent task exists and belongs to user
+        const parentCheck = await pool.query(
+          'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+          [parent_task_id, req.userId]
+        );
+
+        if (parentCheck.rows.length === 0) {
+          return res.status(404).json({ error: 'Parent task not found' });
+        }
+
+        // Prevent circular reference (task can't be its own parent)
+        if (parent_task_id === req.params.id) {
+          return res.status(400).json({ error: 'Task cannot be its own parent' });
+        }
+
+        updatedParentTaskId = parent_task_id;
+      }
+    }
+
     // Handle fractional indexing for position updates
     if (prevPosition !== undefined || nextPosition !== undefined) {
       let newPosition;
@@ -335,8 +458,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
         due_date = COALESCE($5, due_date),
         priority = COALESCE($6, priority),
         position = COALESCE($7, position),
+        parent_task_id = COALESCE($8, parent_task_id),
         updated_at = NOW()
-      WHERE id = $8 AND user_id = $9
+      WHERE id = $9 AND user_id = $10
       RETURNING *
     `;
 
@@ -348,6 +472,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updatedDueDate,
       updatedPriority,
       updatedPosition,
+      updatedParentTaskId,
       req.params.id,
       req.userId
     ];

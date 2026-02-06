@@ -45,18 +45,25 @@ export interface Task {
   due_date: string | null; // ISO date string (YYYY-MM-DD)
   priority: TaskPriority;
   position: number | null; // DOUBLE PRECISION for kanban ordering
+  parent_task_id: string | null; // UUID reference to parent task (null for top-level tasks)
   created_at: string; // ISO timestamp string
   updated_at: string; // ISO timestamp string
+  // Computed fields (not in DB, added by frontend/backend)
+  subtasks?: Task[]; // Array of child tasks
+  completed_subtasks?: number; // Count of completed subtasks
+  total_subtasks?: number; // Total count of subtasks
 }
 
 // Type helpers for creating/updating entities
 export type CreateProjectInput = Omit<Project, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
 export type UpdateProjectInput = Partial<Omit<Project, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
-export type CreateTaskInput = Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'position'> & {
+export type CreateTaskInput = Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'position' | 'subtasks' | 'completed_subtasks' | 'total_subtasks'> & {
   position?: number | null;
+  parent_task_id?: string | null;
 };
-export type UpdateTaskInput = Partial<Omit<Task, 'id' | 'project_id' | 'user_id' | 'created_at' | 'updated_at'>> & {
+export type UpdateTaskInput = Partial<Omit<Task, 'id' | 'project_id' | 'user_id' | 'created_at' | 'updated_at' | 'subtasks' | 'completed_subtasks' | 'total_subtasks'>> & {
   position?: number | null;
+  parent_task_id?: string | null;
 };
 

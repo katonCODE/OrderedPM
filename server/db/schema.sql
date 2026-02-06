@@ -22,8 +22,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
     due_date DATE,
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
+    parent_task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT check_no_self_parent CHECK (
+        parent_task_id != id
+        OR parent_task_id IS NULL
+    )
 );
 -- Profiles table
 CREATE TABLE IF NOT EXISTS profiles (
@@ -44,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW();

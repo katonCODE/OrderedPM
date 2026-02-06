@@ -10,6 +10,7 @@ import Timeline from './Timeline';
 import TaskForm from './TaskForm';
 import TaskCreationModal from './TaskCreationModal';
 import AITaskForm from './AITaskForm';
+import TaskView from './TaskView';
 import './ProjectDetail.css';
 
 function ProjectDetail() {
@@ -20,6 +21,7 @@ function ProjectDetail() {
   const [showCreationModal, setShowCreationModal] = useState(false);
   const [showAITaskForm, setShowAITaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [viewingTask, setViewingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
@@ -61,19 +63,9 @@ function ProjectDetail() {
 
   const handleCreateTask = async (taskData) => {
     try {
-      const newTask = await tasksAPI.create(taskData);
-      queryClient.setQueryData(['tasks', id], (old) => {
-        const oldArray = Array.isArray(old) ? old : old?.data || [];
-        const updatedArray = [newTask, ...oldArray];
-
-        // Return in same format as received
-        if (Array.isArray(old)) {
-          return updatedArray;
-        } else if (old && typeof old === 'object' && 'data' in old) {
-          return { ...old, data: updatedArray };
-        }
-        return updatedArray;
-      });
+      await tasksAPI.create(taskData);
+      // Invalidate query to refetch with proper format (including subtasks)
+      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
       setShowForm(false);
       setShowAITaskForm(false);
     } catch (err) {
@@ -83,19 +75,9 @@ function ProjectDetail() {
 
   const handleUpdateTask = async (taskId, taskData) => {
     try {
-      const updatedTask = await tasksAPI.update(taskId, taskData);
-      queryClient.setQueryData(['tasks', id], (old) => {
-        const oldArray = Array.isArray(old) ? old : old?.data || [];
-        const updatedArray = oldArray.map(t => t.id === taskId ? updatedTask : t);
-
-        // Return in same format as received
-        if (Array.isArray(old)) {
-          return updatedArray;
-        } else if (old && typeof old === 'object' && 'data' in old) {
-          return { ...old, data: updatedArray };
-        }
-        return updatedArray;
-      });
+      await tasksAPI.update(taskId, taskData);
+      // Invalidate query to refetch with proper format (including subtasks)
+      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
       setEditingTask(null);
       setShowForm(false);
     } catch (err) {
@@ -300,8 +282,20 @@ function ProjectDetail() {
     setSelectedDate(date);
   };
 
-  const handleTaskClick = (task) => {
-    handleEditClick(task);
+  const handleTaskClick = async (task) => {
+    // Fetch full task with subtasks
+    try {
+      const fullTask = await tasksAPI.getById(task.id);
+      setViewingTask(fullTask);
+    } catch (err) {
+      console.error('Error fetching task:', err);
+      // Fallback to the task we have
+      setViewingTask(task);
+    }
+  };
+
+  const handleViewTaskClose = () => {
+    setViewingTask(null);
   };
 
   if (loading && !project) {
@@ -340,7 +334,7 @@ function ProjectDetail() {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10 overflow-visible">
+      <header className="relative backdrop-blur-xl bg-white/5 border-b border-white/10 overflow-visible" style={{ zIndex: 10 }}>
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 md:py-8 overflow-visible">
           <button
             onClick={() => navigate('/dashboard')}
@@ -470,6 +464,17 @@ function ProjectDetail() {
           />
         )}
 
+        {viewingTask && (
+          <TaskView
+            task={viewingTask}
+            onEdit={handleEditClick}
+            onClose={handleViewTaskClose}
+            onTaskUpdate={(updatedTask) => {
+              setViewingTask(updatedTask);
+            }}
+          />
+        )}
+
         {loading ? (
           <div className="text-center py-20 text-gray-400">Loading tasks...</div>
         ) : (
@@ -492,6 +497,7 @@ function ProjectDetail() {
                 onPositionChange={handlePositionChange}
                 onEdit={handleEditClick}
                 onDelete={handleDeleteTask}
+                onTaskClick={handleTaskClick}
                 selectedDate={selectedDate}
               />
             </div>

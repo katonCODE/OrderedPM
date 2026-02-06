@@ -1,5 +1,6 @@
 // client/src/components/TaskForm.js
 import React, { useState, useEffect } from 'react';
+import SubtaskList from './SubtaskList';
 
 function TaskForm({ task, projectId, onSubmit, onCancel }) {
   const [title, setTitle] = useState('');
@@ -152,6 +153,12 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
                   />
                 </div>
               </div>
+
+              {task && (
+                <div className="pt-4 border-t border-white/10">
+                  <SubtaskList task={task} subtasks={task.subtasks || []} />
+                </div>
+              )}
 
               {error && (
                 <div className="px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">

@@ -319,5 +319,30 @@ export const tasksAPI = {
       throw error;
     }
   },
+
+  getSubtasks: async (taskId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/subtasks`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  createSubtask: async (parentTaskId, data) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({ ...data, parent_task_id: parentTaskId }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 

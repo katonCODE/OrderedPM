@@ -2,7 +2,7 @@
 import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, selectedDate }) {
+function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate }) {
   const columns = [
     { id: 'todo', title: 'To Do', status: 'todo' },
     { id: 'in_progress', title: 'In Progress', status: 'in_progress' },
@@ -200,14 +200,14 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`flex-1 overflow-y-auto min-h-0 pr-1 transition-all duration-200 ${snapshot.isDraggingOver
-                          ? 'bg-blue-500/20 border-2 border-blue-500/60 border-dashed rounded-lg p-2'
-                          : ''
+                        ? 'bg-blue-500/20 border-2 border-blue-500/60 border-dashed rounded-lg p-2'
+                        : ''
                         }`}
                     >
                       {columnTasks.length === 0 ? (
                         <div className={`text-center text-sm py-8 transition-all ${snapshot.isDraggingOver
-                            ? 'text-blue-400 font-medium'
-                            : 'text-gray-500'
+                          ? 'text-blue-400 font-medium'
+                          : 'text-gray-500'
                           }`}>
                           {snapshot.isDraggingOver ? 'Drop task here' : 'No tasks'}
                         </div>
@@ -218,62 +218,91 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                               <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
-                                {...provided.dragHandleProps}
                                 style={{
                                   ...provided.draggableProps.style,
                                   ...(snapshot.isDragging && {
                                     opacity: 0.4,
                                   }),
                                 }}
-                                className={`relative backdrop-blur-sm bg-white/5 border border-white/10 rounded-lg p-4 mb-3 cursor-grab active:cursor-grabbing transition-all hover:bg-white/10 hover:shadow-lg ${snapshot.isDragging
-                                    ? 'shadow-2xl'
-                                    : ''
+                                className={`relative backdrop-blur-sm bg-white/5 border border-white/10 rounded-lg p-4 mb-3 transition-all hover:bg-white/10 hover:shadow-lg ${snapshot.isDragging
+                                  ? 'shadow-2xl'
+                                  : ''
                                   }`}
                               >
-                                <div className="flex justify-between items-start gap-2 mb-2">
-                                  <h4 className="text-base font-semibold text-[#e0e0e0] flex-1 leading-tight">{task.title}</h4>
-                                  <div className="flex gap-1 flex-shrink-0">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onEdit(task);
-                                      }}
-                                      className="p-1.5 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
-                                      title="Edit"
-                                    >
-                                      ✏️
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDelete(task.id);
-                                      }}
-                                      className="p-1.5 bg-white/5 border border-red-500/20 rounded hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
-                                      title="Delete"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
+                                <div
+                                  {...provided.dragHandleProps}
+                                  className="absolute top-2 left-2 w-6 h-6 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 hover:text-gray-400"
+                                  title="Drag to reorder"
+                                >
+                                  ⋮⋮
                                 </div>
-                                {task.description && (
-                                  <p className="text-sm text-gray-400 mb-3 line-clamp-2">{task.description}</p>
-                                )}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  {task.due_date && (
-                                    <span className="text-xs text-gray-500">
-                                      Due {new Date(task.due_date).toLocaleDateString()}
-                                    </span>
+                                <div
+                                  onClick={() => onTaskClick && onTaskClick(task)}
+                                  className="cursor-pointer pl-8"
+                                >
+                                  <div className="flex justify-between items-start gap-2 mb-2">
+                                    <h4 className="text-base font-semibold text-[#e0e0e0] flex-1 leading-tight">{task.title}</h4>
+                                    <div className="flex gap-1 flex-shrink-0">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onEdit(task);
+                                        }}
+                                        className="p-1.5 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
+                                        title="Edit"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onDelete(task.id);
+                                        }}
+                                        className="p-1.5 bg-white/5 border border-red-500/20 rounded hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                                        title="Delete"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {task.description && (
+                                    <p className="text-sm text-gray-400 mb-3 line-clamp-2">{task.description}</p>
                                   )}
-                                  {task.priority && (
-                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${task.priority === 'high'
-                                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                      : task.priority === 'medium'
-                                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                                        : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                      }`}>
-                                      {formatPriority(task.priority)}
-                                    </span>
+                                  {task.total_subtasks > 0 && (
+                                    <div className="mb-3">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs text-gray-400">Subtasks</span>
+                                        <span className="text-xs text-gray-500">
+                                          {task.completed_subtasks || 0}/{task.total_subtasks}
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-white/5 rounded-full h-1.5">
+                                        <div
+                                          className="bg-gradient-to-r from-blue-400 to-blue-500 h-1.5 rounded-full transition-all duration-300"
+                                          style={{
+                                            width: `${((task.completed_subtasks || 0) / task.total_subtasks) * 100}%`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
                                   )}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {task.due_date && (
+                                      <span className="text-xs text-gray-500">
+                                        Due {new Date(task.due_date).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                    {task.priority && (
+                                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${task.priority === 'high'
+                                        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                        : task.priority === 'medium'
+                                          ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                        }`}>
+                                        {formatPriority(task.priority)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             )}
