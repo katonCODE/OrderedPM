@@ -2,7 +2,7 @@
 import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate }) {
+function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate, searchQuery }) {
   const columns = [
     { id: 'todo', title: 'To Do', status: 'todo' },
     { id: 'in_progress', title: 'In Progress', status: 'in_progress' },
@@ -11,6 +11,15 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
 
   const getTasksForColumn = (status) => {
     let filtered = tasks.filter(task => task.status === status);
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(task => {
+        const titleMatch = task.title?.toLowerCase().includes(query);
+        const descriptionMatch = task.description?.toLowerCase().includes(query);
+        return titleMatch || descriptionMatch;
+      });
+    }
 
     if (selectedDate) {
       filtered = filtered.filter(task => {

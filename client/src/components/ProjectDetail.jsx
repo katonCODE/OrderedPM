@@ -1,5 +1,5 @@
 // client/src/components/ProjectDetail.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
@@ -23,6 +23,7 @@ function ProjectDetail() {
   const [editingTask, setEditingTask] = useState(null);
   const [viewingTask, setViewingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
 
@@ -42,6 +43,17 @@ function ProjectDetail() {
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
+
+  // Calculate filtered tasks count for search feedback
+  const filteredTasksCount = useMemo(() => {
+    if (!searchQuery) return tasks.length;
+    const query = searchQuery.toLowerCase();
+    return tasks.filter(task => {
+      const titleMatch = task.title?.toLowerCase().includes(query);
+      const descriptionMatch = task.description?.toLowerCase().includes(query);
+      return titleMatch || descriptionMatch;
+    }).length;
+  }, [tasks, searchQuery]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -478,30 +490,70 @@ function ProjectDetail() {
         {loading ? (
           <div className="text-center py-20 text-gray-400">Loading tasks...</div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
-            <aside className="flex flex-col gap-6 h-fit lg:sticky lg:top-6 lg:max-h-[calc(100vh-120px)] overflow-y-auto">
-              <MiniCalendar
-                tasks={tasks}
-                onDateClick={handleDateClick}
-                selectedDate={selectedDate}
-              />
-              <Timeline
-                tasks={tasks}
-                onTaskClick={handleTaskClick}
-              />
-            </aside>
-            <div className="min-h-[600px]">
-              <KanbanBoard
-                tasks={tasks}
-                onStatusChange={handleStatusChange}
-                onPositionChange={handlePositionChange}
-                onEdit={handleEditClick}
-                onDelete={handleDeleteTask}
-                onTaskClick={handleTaskClick}
-                selectedDate={selectedDate}
-              />
+          <>
+            {/* Search Bar */}
+            <div className="sticky top-0 z-20 backdrop-blur-xl bg-[#1a1a1a]/80 border border-white/10 rounded-lg p-4 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <div className="flex-1 w-full">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search tasks by title or description..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                    />
+                    {searchQuery && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                        {filteredTasksCount} {filteredTasksCount === 1 ? 'task' : 'tasks'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:bg-white/10 hover:text-[#e0e0e0] transition-all text-sm font-medium"
+                  >
+                    Clear
+                  </button>
+                )}
+                {selectedDate && (
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:bg-white/10 hover:text-[#e0e0e0] transition-all text-sm font-medium"
+                  >
+                    Clear Date Filter
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
+              <aside className="flex flex-col gap-6 h-fit lg:sticky lg:top-6 lg:max-h-[calc(100vh-120px)] overflow-y-auto">
+                <MiniCalendar
+                  tasks={tasks}
+                  onDateClick={handleDateClick}
+                  selectedDate={selectedDate}
+                />
+                <Timeline
+                  tasks={tasks}
+                  onTaskClick={handleTaskClick}
+                />
+              </aside>
+              <div className="min-h-[600px]">
+                <KanbanBoard
+                  tasks={tasks}
+                  onStatusChange={handleStatusChange}
+                  onPositionChange={handlePositionChange}
+                  onEdit={handleEditClick}
+                  onDelete={handleDeleteTask}
+                  onTaskClick={handleTaskClick}
+                  selectedDate={selectedDate}
+                  searchQuery={searchQuery}
+                />
+              </div>
+            </div>
+          </>
         )}
       </main>
     </div>
