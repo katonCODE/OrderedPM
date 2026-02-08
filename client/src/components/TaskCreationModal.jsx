@@ -3,7 +3,7 @@ import React from 'react';
 
 function TaskCreationModal({ onSelectManual, onSelectAI, onClose }) {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={onClose}>
       <div className="relative w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
         {/* Glassmorphism Card */}
         <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl">

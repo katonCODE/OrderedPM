@@ -2,7 +2,7 @@
 import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate, searchQuery }) {
+function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate, searchQuery, selectedTag }) {
   const columns = [
     { id: 'todo', title: 'To Do', status: 'todo' },
     { id: 'in_progress', title: 'In Progress', status: 'in_progress' },
@@ -28,6 +28,12 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
         const selectedDateStr = new Date(selectedDate).toDateString();
         return taskDate === selectedDateStr;
       });
+    }
+
+    if (selectedTag) {
+      filtered = filtered.filter(task =>
+        task.tags && Array.isArray(task.tags) && task.tags.includes(selectedTag)
+      );
     }
 
     // Sort by position (nulls last), then by created_at
@@ -312,6 +318,23 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                                       </span>
                                     )}
                                   </div>
+                                  {task.tags && Array.isArray(task.tags) && task.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {task.tags.slice(0, 3).map((tag, index) => (
+                                        <span
+                                          key={index}
+                                          className="inline-block px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300"
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                      {task.tags.length > 3 && (
+                                        <span className="inline-block px-2 py-0.5 bg-gray-500/20 border border-gray-500/30 rounded text-xs text-gray-400">
+                                          +{task.tags.length - 3}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}

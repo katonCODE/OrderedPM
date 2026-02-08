@@ -278,7 +278,7 @@ Return only the JSON object, nothing else.`;
 // Create a new task
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { project_id, title, description, status, start_date, due_date, priority, parent_task_id } = req.body;
+    const { project_id, title, description, status, start_date, due_date, priority, parent_task_id, tags } = req.body;
 
     if (!project_id && !parent_task_id) {
       return res.status(400).json({ error: 'Either Project ID or Parent Task ID is required' });
@@ -325,9 +325,22 @@ router.post('/', authenticateToken, async (req, res) => {
       ? priority
       : 'medium';
 
+    // Validate and normalize tags
+    let validTags = [];
+    if (tags !== undefined && tags !== null) {
+      if (Array.isArray(tags)) {
+        validTags = tags
+          .map(tag => typeof tag === 'string' ? tag.trim() : String(tag).trim())
+          .filter(tag => tag.length > 0)
+          .slice(0, 20); // Limit to 20 tags
+      } else {
+        return res.status(400).json({ error: 'Tags must be an array' });
+      }
+    }
+
     const result = await pool.query(
-      'INSERT INTO tasks (project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-      [projectId, req.userId, title.trim(), description?.trim() || null, validStatus, start_date || null, due_date || null, validPriority, parentTaskId]
+      'INSERT INTO tasks (project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id, tags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+      [projectId, req.userId, title.trim(), description?.trim() || null, validStatus, start_date || null, due_date || null, validPriority, parentTaskId, JSON.stringify(validTags)]
     );
 
     res.status(201).json(result.rows[0]);
@@ -351,7 +364,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const { title, description, status, start_date, due_date, priority, prevPosition, nextPosition, parent_task_id } = req.body;
+    const { title, description, status, start_date, due_date, priority, prevPosition, nextPosition, parent_task_id, tags } = req.body;
 
     // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
     let updatedTitle = null;
@@ -362,6 +375,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     let updatedPriority = null;
     let updatedPosition = null;
     let updatedParentTaskId = null;
+    let updatedTags = null;
 
     if (title !== undefined) {
       const trimmedTitle = title.trim();
@@ -424,6 +438,24 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    // Handle tags update
+    if (tags !== undefined) {
+      if (tags === null) {
+        updatedTags = JSON.stringify([]);
+      } else if (Array.isArray(tags)) {
+        const validTags = tags
+          .map(tag => typeof tag === 'string' ? tag.trim() : String(tag).trim())
+          .filter(tag => tag.length > 0)
+          .slice(0, 20); // Limit to 20 tags
+        updatedTags = JSON.stringify(validTags);
+      } else {
+        return res.status(400).json({ error: 'Tags must be an array' });
+      }
+    } else {
+      // If tags is undefined, set to null so CASE keeps existing value
+      updatedTags = null;
+    }
+
     // Handle fractional indexing for position updates
     if (prevPosition !== undefined || nextPosition !== undefined) {
       let newPosition;
@@ -448,41 +480,76 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updatedPosition = req.body.position;
     }
 
-    const queryText = `
+    // Build dynamic query based on what's being updated
+    const updateFields = [];
+    const updateValues = [];
+    let paramIndex = 1;
+    let queryText = ''; // Initialize for error handling
+
+    if (updatedTitle !== null) {
+      updateFields.push(`title = $${paramIndex++}`);
+      updateValues.push(updatedTitle);
+    }
+    if (updatedDescription !== null) {
+      updateFields.push(`description = $${paramIndex++}`);
+      updateValues.push(updatedDescription);
+    }
+    if (updatedStatus !== null) {
+      updateFields.push(`status = $${paramIndex++}`);
+      updateValues.push(updatedStatus);
+    }
+    if (updatedStartDate !== null) {
+      updateFields.push(`start_date = $${paramIndex++}`);
+      updateValues.push(updatedStartDate);
+    }
+    if (updatedDueDate !== null) {
+      updateFields.push(`due_date = $${paramIndex++}`);
+      updateValues.push(updatedDueDate);
+    }
+    if (updatedPriority !== null) {
+      updateFields.push(`priority = $${paramIndex++}`);
+      updateValues.push(updatedPriority);
+    }
+    if (updatedPosition !== null) {
+      updateFields.push(`position = $${paramIndex++}`);
+      updateValues.push(updatedPosition);
+    }
+    if (updatedParentTaskId !== null) {
+      updateFields.push(`parent_task_id = $${paramIndex++}`);
+      updateValues.push(updatedParentTaskId);
+    }
+    if (updatedTags !== null) {
+      updateFields.push(`tags = $${paramIndex++}::jsonb`);
+      updateValues.push(updatedTags);
+    }
+
+    updateFields.push(`updated_at = NOW()`);
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    queryText = `
       UPDATE tasks 
-      SET 
-        title = COALESCE($1, title),
-        description = COALESCE($2, description),
-        status = COALESCE($3, status),
-        start_date = COALESCE($4, start_date),
-        due_date = COALESCE($5, due_date),
-        priority = COALESCE($6, priority),
-        position = COALESCE($7, position),
-        parent_task_id = COALESCE($8, parent_task_id),
-        updated_at = NOW()
-      WHERE id = $9 AND user_id = $10
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}
       RETURNING *
     `;
 
-    const values = [
-      updatedTitle,
-      updatedDescription,
-      updatedStatus,
-      updatedStartDate,
-      updatedDueDate,
-      updatedPriority,
-      updatedPosition,
-      updatedParentTaskId,
-      req.params.id,
-      req.userId
-    ];
+    updateValues.push(req.params.id, req.userId);
 
-    const result = await pool.query(queryText, values);
+    const result = await pool.query(queryText, updateValues);
 
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating task:', error);
     console.error('Error details:', error.message, error.stack);
+
+    // Provide more specific error messages
+    if (error.code === '23514') {
+      return res.status(400).json({ error: 'Tags must be a valid JSON array' });
+    }
+
     res.status(500).json({ error: 'Internal server error' });
   }
 });

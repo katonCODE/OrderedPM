@@ -24,6 +24,7 @@ function ProjectDetail() {
   const [viewingTask, setViewingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTag, setSelectedTag] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
 
@@ -44,16 +45,35 @@ function ProjectDetail() {
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
 
+  // Get all unique tags from tasks
+  const allTags = useMemo(() => {
+    const tagSet = new Set();
+    tasks.forEach(task => {
+      if (task.tags && Array.isArray(task.tags)) {
+        task.tags.forEach(tag => tagSet.add(tag));
+      }
+    });
+    return Array.from(tagSet).sort();
+  }, [tasks]);
+
   // Calculate filtered tasks count for search feedback
   const filteredTasksCount = useMemo(() => {
-    if (!searchQuery) return tasks.length;
-    const query = searchQuery.toLowerCase();
-    return tasks.filter(task => {
-      const titleMatch = task.title?.toLowerCase().includes(query);
-      const descriptionMatch = task.description?.toLowerCase().includes(query);
-      return titleMatch || descriptionMatch;
-    }).length;
-  }, [tasks, searchQuery]);
+    let filtered = tasks;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(task => {
+        const titleMatch = task.title?.toLowerCase().includes(query);
+        const descriptionMatch = task.description?.toLowerCase().includes(query);
+        return titleMatch || descriptionMatch;
+      });
+    }
+    if (selectedTag) {
+      filtered = filtered.filter(task =>
+        task.tags && Array.isArray(task.tags) && task.tags.includes(selectedTag)
+      );
+    }
+    return filtered.length;
+  }, [tasks, searchQuery, selectedTag]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -129,6 +149,7 @@ function ProjectDetail() {
         start_date: task.start_date || null,
         due_date: task.due_date || null,
         priority: task.priority || 'medium',
+        tags: task.tags || [],
       });
     },
     onMutate: async ({ taskId, newStatus }) => {
@@ -185,6 +206,7 @@ function ProjectDetail() {
         start_date: task.start_date || null,
         due_date: task.due_date || null,
         priority: task.priority || 'medium',
+        tags: task.tags || [],
         prevPosition: prevPosition,
         nextPosition: nextPosition,
       });
@@ -346,7 +368,7 @@ function ProjectDetail() {
       </div>
 
       {/* Header */}
-      <header className="relative backdrop-blur-xl bg-white/5 border-b border-white/10 overflow-visible" style={{ zIndex: 10 }}>
+      <header className="relative backdrop-blur-xl bg-white/5 border-b border-white/10 overflow-visible" style={{ zIndex: 1 }}>
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-6 md:py-8 overflow-visible">
           <button
             onClick={() => navigate('/dashboard')}
@@ -493,38 +515,63 @@ function ProjectDetail() {
           <>
             {/* Search Bar */}
             <div className="sticky top-0 z-20 backdrop-blur-xl bg-[#1a1a1a]/80 border border-white/10 rounded-lg p-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <div className="flex-1 w-full">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Search tasks by title or description..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                    />
-                    {searchQuery && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                        {filteredTasksCount} {filteredTasksCount === 1 ? 'task' : 'tasks'}
-                      </span>
-                    )}
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row gap-4 items-center">
+                  <div className="flex-1 w-full">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search tasks by title or description..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                      />
+                      {(searchQuery || selectedTag) && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                          {filteredTasksCount} {filteredTasksCount === 1 ? 'task' : 'tasks'}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {allTags.length > 0 && (
+                    <select
+                      value={selectedTag || ''}
+                      onChange={(e) => setSelectedTag(e.target.value || null)}
+                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-yellow-500/50 min-w-[150px]"
+                    >
+                      <option value="">All Tags</option>
+                      {allTags.map(tag => (
+                        <option key={tag} value={tag}>{tag}</option>
+                      ))}
+                    </select>
+                  )}
+                  {(searchQuery || selectedDate || selectedTag) && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSelectedDate(null);
+                        setSelectedTag(null);
+                      }}
+                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:bg-white/10 hover:text-[#e0e0e0] transition-all text-sm font-medium"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
                 </div>
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:bg-white/10 hover:text-[#e0e0e0] transition-all text-sm font-medium"
-                  >
-                    Clear
-                  </button>
-                )}
-                {selectedDate && (
-                  <button
-                    onClick={() => setSelectedDate(null)}
-                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:bg-white/10 hover:text-[#e0e0e0] transition-all text-sm font-medium"
-                  >
-                    Clear Date Filter
-                  </button>
+                {selectedTag && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-400">Filtered by tag:</span>
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-sm text-blue-300">
+                      {selectedTag}
+                      <button
+                        onClick={() => setSelectedTag(null)}
+                        className="hover:text-blue-200 transition-colors"
+                        title="Remove tag filter"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -550,6 +597,7 @@ function ProjectDetail() {
                   onTaskClick={handleTaskClick}
                   selectedDate={selectedDate}
                   searchQuery={searchQuery}
+                  selectedTag={selectedTag}
                 />
               </div>
             </div>

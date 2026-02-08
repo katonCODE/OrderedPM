@@ -1,5 +1,6 @@
 // client/src/components/TaskForm.js
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import SubtaskList from './SubtaskList';
 
 function TaskForm({ task, projectId, onSubmit, onCancel }) {
@@ -9,6 +10,8 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
   const [dueDate, setDueDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [priority, setPriority] = useState('medium');
+  const [tags, setTags] = useState([]);
+  const [newTag, setNewTag] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,6 +23,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setDueDate(task.due_date ? task.due_date.split('T')[0] : '');
       setStartDate(task.start_date ? task.start_date.split('T')[0] : '');
       setPriority(task.priority || 'medium');
+      setTags(Array.isArray(task.tags) ? task.tags : []);
     } else {
       // Reset form when creating a new task
       setTitle('');
@@ -28,6 +32,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setDueDate('');
       setStartDate('');
       setPriority('medium');
+      setTags([]);
     }
   }, [task]);
 
@@ -38,9 +43,9 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
 
     try {
       if (task) {
-        await onSubmit(task.id, { title, description, status, due_date: dueDate || null, start_date: startDate || null, priority });
+        await onSubmit(task.id, { title, description, status, due_date: dueDate || null, start_date: startDate || null, priority, tags });
       } else {
-        await onSubmit({ project_id: projectId, title, description, status, due_date: dueDate || null, start_date: startDate || null, priority });
+        await onSubmit({ project_id: projectId, title, description, status, due_date: dueDate || null, start_date: startDate || null, priority, tags });
       }
     } catch (err) {
       setError(err.message || 'Failed to save task');
@@ -49,9 +54,23 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="relative w-full max-w-2xl my-auto">
+  const handleAddTag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const trimmedTag = newTag.trim();
+    if (trimmedTag && !tags.includes(trimmedTag) && tags.length < 20) {
+      setTags([...tags, trimmedTag]);
+      setNewTag('');
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove) => {
+    setTags(tags.filter(tag => tag !== tagToRemove));
+  };
+
+  const modalContent = (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ zIndex: 99999, isolation: 'isolate' }}>
+      <div className="relative w-full max-w-2xl my-auto" style={{ zIndex: 99999 }}>
         {/* Glassmorphism Card */}
         <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
           {/* Floating effect */}
@@ -154,6 +173,59 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
                 </div>
               </div>
 
+              <div>
+                <label htmlFor="task-tags" className="block text-sm font-medium text-gray-400 mb-2">
+                  Tags
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-sm text-blue-300"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        className="hover:text-blue-200 transition-colors"
+                        title="Remove tag"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    id="task-tags"
+                    type="text"
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleAddTag(e);
+                      }
+                    }}
+                    placeholder="Add a tag (press Enter)"
+                    maxLength={30}
+                    className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddTag}
+                    disabled={!newTag.trim() || tags.length >= 20}
+                    className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+                {tags.length >= 20 && (
+                  <p className="text-xs text-gray-500 mt-1">Maximum 20 tags reached</p>
+                )}
+              </div>
+
               {task && (
                 <div className="pt-4 border-t border-white/10">
                   <SubtaskList task={task} subtasks={task.subtasks || []} />
@@ -189,6 +261,9 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       </div>
     </div>
   );
+
+  // Render modal in a portal to ensure it's always on top
+  return createPortal(modalContent, document.body);
 }
 
 export default TaskForm;

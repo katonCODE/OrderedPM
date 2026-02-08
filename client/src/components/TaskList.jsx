@@ -80,6 +80,18 @@ function TaskList({ tasks, onEdit, onDelete, onStatusChange }) {
                 </span>
               )}
             </div>
+            {task.tags && Array.isArray(task.tags) && task.tags.length > 0 && (
+              <div className="task-tags mt-2 flex flex-wrap gap-1">
+                {task.tags.map((tag, index) => (
+                  <span
+                    key={index}
+                    className="inline-block px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="task-actions">
             <button onClick={() => onEdit(task)} className="btn-icon" title="Edit">

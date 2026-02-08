@@ -120,6 +120,22 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                 </div>
               )}
 
+              {currentTask.tags && Array.isArray(currentTask.tags) && currentTask.tags.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Tags</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {currentTask.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="inline-block px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-sm text-blue-300"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="pt-4 border-t border-white/10">
                 <SubtaskList
                   task={currentTask}
