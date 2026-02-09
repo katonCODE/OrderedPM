@@ -25,6 +25,8 @@ function ProjectDetail() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState(null);
+  const [selectedPriority, setSelectedPriority] = useState(null);
+  const [sortByPriority, setSortByPriority] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef(null);
 
@@ -72,8 +74,11 @@ function ProjectDetail() {
         task.tags && Array.isArray(task.tags) && task.tags.includes(selectedTag)
       );
     }
+    if (selectedPriority) {
+      filtered = filtered.filter(task => task.priority === selectedPriority);
+    }
     return filtered.length;
-  }, [tasks, searchQuery, selectedTag]);
+  }, [tasks, searchQuery, selectedTag, selectedPriority]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -526,7 +531,7 @@ function ProjectDetail() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
                       />
-                      {(searchQuery || selectedTag) && (
+                      {(searchQuery || selectedTag || selectedPriority) && (
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
                           {filteredTasksCount} {filteredTasksCount === 1 ? 'task' : 'tasks'}
                         </span>
@@ -545,12 +550,50 @@ function ProjectDetail() {
                       ))}
                     </select>
                   )}
-                  {(searchQuery || selectedDate || selectedTag) && (
+                  <div className="flex gap-2 flex-wrap">
+                    {['all', 'high', 'medium', 'low'].map((priority) => (
+                      <button
+                        key={priority}
+                        onClick={() => {
+                          if (priority === 'all') {
+                            setSelectedPriority(null);
+                          } else {
+                            setSelectedPriority(priority);
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${(priority === 'all' && !selectedPriority) || selectedPriority === priority
+                            ? priority === 'all'
+                              ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                              : priority === 'high'
+                                ? 'bg-red-500/20 border border-red-500/30 text-red-400'
+                                : priority === 'medium'
+                                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                                  : 'bg-blue-500/20 border border-blue-500/30 text-blue-400'
+                            : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                          }`}
+                      >
+                        {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setSortByPriority(!sortByPriority)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${sortByPriority
+                        ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
+                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                      }`}
+                    title="Sort by priority (High → Medium → Low)"
+                  >
+                    {sortByPriority ? '✓ Sort by Priority' : 'Sort by Priority'}
+                  </button>
+                  {(searchQuery || selectedDate || selectedTag || selectedPriority) && (
                     <button
                       onClick={() => {
                         setSearchQuery('');
                         setSelectedDate(null);
                         setSelectedTag(null);
+                        setSelectedPriority(null);
+                        setSortByPriority(false);
                       }}
                       className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:bg-white/10 hover:text-[#e0e0e0] transition-all text-sm font-medium"
                     >
@@ -558,21 +601,58 @@ function ProjectDetail() {
                     </button>
                   )}
                 </div>
-                {selectedTag && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-400">Filtered by tag:</span>
-                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-sm text-blue-300">
-                      {selectedTag}
-                      <button
-                        onClick={() => setSelectedTag(null)}
-                        className="hover:text-blue-200 transition-colors"
-                        title="Remove tag filter"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  </div>
-                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  {selectedTag && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400">Tag:</span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-sm text-blue-300">
+                        {selectedTag}
+                        <button
+                          onClick={() => setSelectedTag(null)}
+                          className="hover:text-blue-200 transition-colors"
+                          title="Remove tag filter"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                  {selectedPriority && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400">Priority:</span>
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${selectedPriority === 'high'
+                          ? 'bg-red-500/20 border-red-500/30 text-red-300'
+                          : selectedPriority === 'medium'
+                            ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
+                            : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                        }`}>
+                        {selectedPriority.charAt(0).toUpperCase() + selectedPriority.slice(1)}
+                        <button
+                          onClick={() => setSelectedPriority(null)}
+                          className="hover:opacity-70 transition-opacity"
+                          title="Remove priority filter"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                  {sortByPriority && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400">Sorted by:</span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-500/20 border border-purple-500/30 rounded-full text-sm text-purple-300">
+                        Priority
+                        <button
+                          onClick={() => setSortByPriority(false)}
+                          className="hover:opacity-70 transition-opacity"
+                          title="Remove priority sort"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
@@ -598,6 +678,8 @@ function ProjectDetail() {
                   selectedDate={selectedDate}
                   searchQuery={searchQuery}
                   selectedTag={selectedTag}
+                  selectedPriority={selectedPriority}
+                  sortByPriority={sortByPriority}
                 />
               </div>
             </div>

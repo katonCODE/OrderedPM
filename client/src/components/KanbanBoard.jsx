@@ -2,12 +2,17 @@
 import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate, searchQuery, selectedTag }) {
+function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate, searchQuery, selectedTag, selectedPriority, sortByPriority }) {
   const columns = [
     { id: 'todo', title: 'To Do', status: 'todo' },
     { id: 'in_progress', title: 'In Progress', status: 'in_progress' },
     { id: 'done', title: 'Done', status: 'done' },
   ];
+
+  const getPriorityOrder = (priority) => {
+    const order = { high: 1, medium: 2, low: 3 };
+    return order[priority] || 4; // Default to end if priority is null/undefined
+  };
 
   const getTasksForColumn = (status) => {
     let filtered = tasks.filter(task => task.status === status);
@@ -36,8 +41,20 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
       );
     }
 
-    // Sort by position (nulls last), then by created_at
+    if (selectedPriority) {
+      filtered = filtered.filter(task => task.priority === selectedPriority);
+    }
+
+    // Sort by priority if enabled, then by position (nulls last), then by created_at
     filtered.sort((a, b) => {
+      if (sortByPriority) {
+        const priorityA = getPriorityOrder(a.priority);
+        const priorityB = getPriorityOrder(b.priority);
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+      }
+
       const posA = a.position ?? Infinity;
       const posB = b.position ?? Infinity;
       if (posA !== posB) {
