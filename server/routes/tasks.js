@@ -104,6 +104,31 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
   }
 });
 
+// Global task search (title/description across all user projects)
+router.get('/search', authenticateToken, async (req, res) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!q) {
+      return res.json({ data: [] });
+    }
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 20), 50);
+    const result = await pool.query(
+      `SELECT t.id, t.project_id, t.title, t.status, t.due_date, t.priority, p.name AS project_name
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id
+       WHERE t.user_id = $1 AND t.parent_task_id IS NULL
+         AND (t.title ILIKE $2 OR t.description ILIKE $2)
+       ORDER BY t.updated_at DESC
+       LIMIT $3`,
+      [req.userId, `%${q.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`, limit]
+    );
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error searching tasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get a single task by ID
 router.get('/:id', authenticateToken, async (req, res) => {
   try {

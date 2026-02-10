@@ -237,6 +237,21 @@ export const tasksAPI = {
     }
   },
 
+  search: async (q, options = {}) => {
+    try {
+      const params = new URLSearchParams();
+      if (q && typeof q === 'string') params.append('q', q.trim());
+      if (options.limit != null) params.append('limit', options.limit);
+      const url = `${API_URL}/api/tasks/search${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
   getByProject: async (projectId, options = {}) => {
     try {
       const { limit = 50, offset = 0 } = options;

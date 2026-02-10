@@ -1,6 +1,6 @@
 // client/src/components/ProjectDetail.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
 import { exportProjectData } from '../utils/export';
@@ -11,11 +11,13 @@ import TaskForm from './TaskForm';
 import TaskCreationModal from './TaskCreationModal';
 import AITaskForm from './AITaskForm';
 import TaskView from './TaskView';
+import GlobalTaskSearch from './GlobalTaskSearch';
 import './ProjectDetail.css';
 
 function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [showCreationModal, setShowCreationModal] = useState(false);
@@ -79,6 +81,13 @@ function ProjectDetail() {
     }
     return filtered.length;
   }, [tasks, searchQuery, selectedTag, selectedPriority]);
+
+  useEffect(() => {
+    const openTaskId = location.state?.openTaskId;
+    if (!openTaskId) return;
+    setViewingTask({ id: openTaskId });
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.state?.openTaskId]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -381,6 +390,9 @@ function ProjectDetail() {
           >
             ← Back to Projects
           </button>
+          <div className="mb-4 w-full max-w-md">
+            <GlobalTaskSearch />
+          </div>
           <div className="flex justify-between items-start gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
@@ -562,14 +574,14 @@ function ProjectDetail() {
                           }
                         }}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${(priority === 'all' && !selectedPriority) || selectedPriority === priority
-                            ? priority === 'all'
-                              ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                              : priority === 'high'
-                                ? 'bg-red-500/20 border border-red-500/30 text-red-400'
-                                : priority === 'medium'
-                                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                                  : 'bg-blue-500/20 border border-blue-500/30 text-blue-400'
-                            : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                          ? priority === 'all'
+                            ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                            : priority === 'high'
+                              ? 'bg-red-500/20 border border-red-500/30 text-red-400'
+                              : priority === 'medium'
+                                ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                                : 'bg-blue-500/20 border border-blue-500/30 text-blue-400'
+                          : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                           }`}
                       >
                         {priority.charAt(0).toUpperCase() + priority.slice(1)}
@@ -579,8 +591,8 @@ function ProjectDetail() {
                   <button
                     onClick={() => setSortByPriority(!sortByPriority)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${sortByPriority
-                        ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
-                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                      ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
+                      : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                       }`}
                     title="Sort by priority (High → Medium → Low)"
                   >
@@ -621,10 +633,10 @@ function ProjectDetail() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-gray-400">Priority:</span>
                       <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${selectedPriority === 'high'
-                          ? 'bg-red-500/20 border-red-500/30 text-red-300'
-                          : selectedPriority === 'medium'
-                            ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
-                            : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                        ? 'bg-red-500/20 border-red-500/30 text-red-300'
+                        : selectedPriority === 'medium'
+                          ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
+                          : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
                         }`}>
                         {selectedPriority.charAt(0).toUpperCase() + selectedPriority.slice(1)}
                         <button

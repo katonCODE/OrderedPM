@@ -11,6 +11,7 @@ import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
 import ConfirmDialog from './ConfirmDialog';
 import Pagination from './Pagination';
+import GlobalTaskSearch from './GlobalTaskSearch';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -366,14 +367,17 @@ function Dashboard({ onLogout }) {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 backdrop-blur-xl bg-white/5 border-b border-white/10">
+      <header className="relative z-40 backdrop-blur-xl bg-white/5 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-4 md:py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold">
+            <h1 className="text-2xl md:text-3xl font-bold shrink-0">
               <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
                 OrderedPM
               </span>
             </h1>
+            <div className="hidden sm:block flex-1 max-w-md mx-4 relative z-[120]">
+              <GlobalTaskSearch />
+            </div>
             <div className="flex items-center gap-4">
               {profile && (
                 <button
@@ -409,7 +413,7 @@ function Dashboard({ onLogout }) {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
+      <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">My Projects</h2>
           <div className="flex gap-3">
