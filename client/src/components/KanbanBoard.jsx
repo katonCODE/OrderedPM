@@ -192,6 +192,13 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
     return priority.charAt(0).toUpperCase() + priority.slice(1);
   };
 
+  const formatRecurrence = (task) => {
+    if (!task?.recurrence_type) return null;
+    const interval = task.recurrence_interval || 1;
+    const label = task.recurrence_type.charAt(0).toUpperCase() + task.recurrence_type.slice(1);
+    return interval > 1 ? `Every ${interval} ${label}` : `Every ${label}`;
+  };
+
   return (
     <>
       <style>{`
@@ -332,6 +339,11 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                                           : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                                         }`}>
                                         {formatPriority(task.priority)}
+                                      </span>
+                                    )}
+                                    {task.recurrence_type && (
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                        {formatRecurrence(task)}
                                       </span>
                                     )}
                                   </div>

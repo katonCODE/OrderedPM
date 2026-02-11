@@ -12,6 +12,9 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
   const [priority, setPriority] = useState('medium');
   const [tags, setTags] = useState([]);
   const [newTag, setNewTag] = useState('');
+  const [recurrenceType, setRecurrenceType] = useState('');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,6 +27,9 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setStartDate(task.start_date ? task.start_date.split('T')[0] : '');
       setPriority(task.priority || 'medium');
       setTags(Array.isArray(task.tags) ? task.tags : []);
+      setRecurrenceType(task.recurrence_type || '');
+      setRecurrenceInterval(task.recurrence_interval || 1);
+      setRecurrenceEndDate(task.recurrence_end_date ? task.recurrence_end_date.split('T')[0] : '');
     } else {
       // Reset form when creating a new task
       setTitle('');
@@ -33,6 +39,9 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setStartDate('');
       setPriority('medium');
       setTags([]);
+      setRecurrenceType('');
+      setRecurrenceInterval(1);
+      setRecurrenceEndDate('');
     }
   }, [task]);
 
@@ -42,10 +51,23 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
     setLoading(true);
 
     try {
+      const payload = {
+        title,
+        description,
+        status,
+        due_date: dueDate || null,
+        start_date: startDate || null,
+        priority,
+        tags,
+        recurrence_type: recurrenceType || null,
+        recurrence_interval: recurrenceType ? Math.max(1, Number(recurrenceInterval) || 1) : null,
+        recurrence_end_date: recurrenceType ? (recurrenceEndDate || null) : null,
+      };
+
       if (task) {
-        await onSubmit(task.id, { title, description, status, due_date: dueDate || null, start_date: startDate || null, priority, tags });
+        await onSubmit(task.id, payload);
       } else {
-        await onSubmit({ project_id: projectId, title, description, status, due_date: dueDate || null, start_date: startDate || null, priority, tags });
+        await onSubmit({ project_id: projectId, ...payload });
       }
     } catch (err) {
       setError(err.message || 'Failed to save task');
@@ -142,6 +164,55 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="task-recurrence-type" className="block text-sm font-medium text-gray-400 mb-2">
+                    Repeat
+                  </label>
+                  <select
+                    id="task-recurrence-type"
+                    value={recurrenceType}
+                    onChange={(e) => setRecurrenceType(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                  >
+                    <option value="">Does not repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="task-recurrence-interval" className="block text-sm font-medium text-gray-400 mb-2">
+                    Every
+                  </label>
+                  <input
+                    id="task-recurrence-interval"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={recurrenceInterval}
+                    onChange={(e) => setRecurrenceInterval(e.target.value)}
+                    disabled={!recurrenceType}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="task-recurrence-end-date" className="block text-sm font-medium text-gray-400 mb-2">
+                    Repeat Until
+                  </label>
+                  <input
+                    id="task-recurrence-end-date"
+                    type="date"
+                    value={recurrenceEndDate}
+                    onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                    disabled={!recurrenceType}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                  />
                 </div>
               </div>
 

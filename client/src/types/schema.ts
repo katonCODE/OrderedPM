@@ -16,6 +16,12 @@ export enum TaskPriority {
   HIGH = 'high',
 }
 
+export enum TaskRecurrenceType {
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+  MONTHLY = 'monthly',
+}
+
 // User type (from Supabase Auth)
 export interface User {
   id: string;
@@ -42,10 +48,16 @@ export interface Task {
   title: string;
   description: string | null;
   status: TaskStatus;
+  start_date: string | null; // ISO date string (YYYY-MM-DD)
   due_date: string | null; // ISO date string (YYYY-MM-DD)
   priority: TaskPriority;
   position: number | null; // DOUBLE PRECISION for kanban ordering
   parent_task_id: string | null; // UUID reference to parent task (null for top-level tasks)
+  tags: string[];
+  recurrence_type: TaskRecurrenceType | null;
+  recurrence_interval: number | null;
+  recurrence_end_date: string | null; // ISO date string (YYYY-MM-DD)
+  last_generated_at: string | null; // ISO timestamp string
   created_at: string; // ISO timestamp string
   updated_at: string; // ISO timestamp string
   // Computed fields (not in DB, added by frontend/backend)

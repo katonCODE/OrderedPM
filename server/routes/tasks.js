@@ -7,6 +7,35 @@ const createAIRateLimiter = require('../middleware/rateLimit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const aiRateLimiter = createAIRateLimiter();
+const VALID_RECURRENCE_TYPES = ['daily', 'weekly', 'monthly'];
+
+const parseDateOnly = (dateString) => {
+  if (!dateString || typeof dateString !== 'string') return null;
+  const parts = dateString.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+  return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+};
+
+const formatDateOnly = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+};
+
+const addRecurrenceToDate = (dateString, recurrenceType, recurrenceInterval) => {
+  if (!dateString) return null;
+  const date = parseDateOnly(dateString);
+  if (!date) return null;
+
+  if (recurrenceType === 'daily') {
+    date.setUTCDate(date.getUTCDate() + recurrenceInterval);
+  } else if (recurrenceType === 'weekly') {
+    date.setUTCDate(date.getUTCDate() + (7 * recurrenceInterval));
+  } else if (recurrenceType === 'monthly') {
+    date.setUTCMonth(date.getUTCMonth() + recurrenceInterval);
+  }
+
+  return formatDateOnly(date);
+};
 
 // Get all tasks for the authenticated user (for dashboard stats)
 router.get('/user/all', authenticateToken, async (req, res) => {
@@ -303,7 +332,20 @@ Return only the JSON object, nothing else.`;
 // Create a new task
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { project_id, title, description, status, start_date, due_date, priority, parent_task_id, tags } = req.body;
+    const {
+      project_id,
+      title,
+      description,
+      status,
+      start_date,
+      due_date,
+      priority,
+      parent_task_id,
+      tags,
+      recurrence_type,
+      recurrence_interval,
+      recurrence_end_date
+    } = req.body;
 
     if (!project_id && !parent_task_id) {
       return res.status(400).json({ error: 'Either Project ID or Parent Task ID is required' });
@@ -350,6 +392,34 @@ router.post('/', authenticateToken, async (req, res) => {
       ? priority
       : 'medium';
 
+    let validRecurrenceType = null;
+    let validRecurrenceInterval = null;
+    let validRecurrenceEndDate = null;
+    if (recurrence_type !== undefined && recurrence_type !== null && recurrence_type !== '') {
+      const normalizedType = String(recurrence_type).toLowerCase();
+      if (!VALID_RECURRENCE_TYPES.includes(normalizedType)) {
+        return res.status(400).json({ error: 'Invalid recurrence type. Must be daily, weekly, or monthly' });
+      }
+      validRecurrenceType = normalizedType;
+
+      if (recurrence_interval !== undefined && recurrence_interval !== null && recurrence_interval !== '') {
+        const parsedInterval = parseInt(recurrence_interval, 10);
+        if (!Number.isInteger(parsedInterval) || parsedInterval < 1) {
+          return res.status(400).json({ error: 'Recurrence interval must be a positive integer' });
+        }
+        validRecurrenceInterval = parsedInterval;
+      } else {
+        validRecurrenceInterval = 1;
+      }
+
+      validRecurrenceEndDate = recurrence_end_date || null;
+    } else if (
+      recurrence_interval !== undefined ||
+      (recurrence_end_date !== undefined && recurrence_end_date !== null && recurrence_end_date !== '')
+    ) {
+      return res.status(400).json({ error: 'Recurrence type is required when recurrence interval or end date is set' });
+    }
+
     // Validate and normalize tags
     let validTags = [];
     if (tags !== undefined && tags !== null) {
@@ -364,8 +434,25 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      'INSERT INTO tasks (project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id, tags) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-      [projectId, req.userId, title.trim(), description?.trim() || null, validStatus, start_date || null, due_date || null, validPriority, parentTaskId, JSON.stringify(validTags)]
+      `INSERT INTO tasks (
+        project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id, tags,
+        recurrence_type, recurrence_interval, recurrence_end_date
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+      [
+        projectId,
+        req.userId,
+        title.trim(),
+        description?.trim() || null,
+        validStatus,
+        start_date || null,
+        due_date || null,
+        validPriority,
+        parentTaskId,
+        JSON.stringify(validTags),
+        validRecurrenceType,
+        validRecurrenceInterval,
+        validRecurrenceEndDate
+      ]
     );
 
     res.status(201).json(result.rows[0]);
@@ -389,18 +476,42 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const { title, description, status, start_date, due_date, priority, prevPosition, nextPosition, parent_task_id, tags } = req.body;
+    const {
+      title,
+      description,
+      status,
+      start_date,
+      due_date,
+      priority,
+      prevPosition,
+      nextPosition,
+      parent_task_id,
+      tags,
+      recurrence_type,
+      recurrence_interval,
+      recurrence_end_date
+    } = req.body;
 
     // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
     let updatedTitle = null;
+    let shouldUpdateDescription = false;
     let updatedDescription = null;
     let updatedStatus = null;
+    let shouldUpdateStartDate = false;
     let updatedStartDate = null;
+    let shouldUpdateDueDate = false;
     let updatedDueDate = null;
     let updatedPriority = null;
     let updatedPosition = null;
+    let shouldUpdateParentTaskId = false;
     let updatedParentTaskId = null;
     let updatedTags = null;
+    let shouldUpdateRecurrenceType = false;
+    let shouldUpdateRecurrenceInterval = false;
+    let shouldUpdateRecurrenceEndDate = false;
+    let updatedRecurrenceType = null;
+    let updatedRecurrenceInterval = null;
+    let updatedRecurrenceEndDate = null;
 
     if (title !== undefined) {
       const trimmedTitle = title.trim();
@@ -411,6 +522,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     if (description !== undefined) {
+      shouldUpdateDescription = true;
       updatedDescription = description?.trim() || null;
     }
 
@@ -423,10 +535,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     if (start_date !== undefined) {
+      shouldUpdateStartDate = true;
       updatedStartDate = start_date || null;
     }
 
     if (due_date !== undefined) {
+      shouldUpdateDueDate = true;
       updatedDueDate = due_date || null;
     }
 
@@ -440,6 +554,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // Handle parent_task_id update
     if (parent_task_id !== undefined) {
+      shouldUpdateParentTaskId = true;
       if (parent_task_id === null) {
         // Removing parent (making it a top-level task)
         updatedParentTaskId = null;
@@ -481,6 +596,52 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updatedTags = null;
     }
 
+    if (recurrence_type !== undefined || recurrence_interval !== undefined || recurrence_end_date !== undefined) {
+      if (recurrence_type === null || recurrence_type === '') {
+        shouldUpdateRecurrenceType = true;
+        shouldUpdateRecurrenceInterval = true;
+        shouldUpdateRecurrenceEndDate = true;
+        updatedRecurrenceType = null;
+        updatedRecurrenceInterval = null;
+        updatedRecurrenceEndDate = null;
+      } else {
+        const baseType = recurrence_type !== undefined
+          ? String(recurrence_type).toLowerCase()
+          : existingTask.rows[0].recurrence_type;
+
+        if (!baseType || !VALID_RECURRENCE_TYPES.includes(baseType)) {
+          return res.status(400).json({ error: 'Invalid recurrence type. Must be daily, weekly, or monthly' });
+        }
+
+        let baseInterval;
+        if (recurrence_interval !== undefined && recurrence_interval !== null && recurrence_interval !== '') {
+          const parsedInterval = parseInt(recurrence_interval, 10);
+          if (!Number.isInteger(parsedInterval) || parsedInterval < 1) {
+            return res.status(400).json({ error: 'Recurrence interval must be a positive integer' });
+          }
+          baseInterval = parsedInterval;
+        } else if (recurrence_interval === null || recurrence_interval === '') {
+          baseInterval = 1;
+        } else {
+          baseInterval = existingTask.rows[0].recurrence_interval || 1;
+        }
+
+        let baseEndDate;
+        if (recurrence_end_date !== undefined) {
+          baseEndDate = recurrence_end_date || null;
+        } else {
+          baseEndDate = existingTask.rows[0].recurrence_end_date || null;
+        }
+
+        shouldUpdateRecurrenceType = true;
+        shouldUpdateRecurrenceInterval = true;
+        shouldUpdateRecurrenceEndDate = true;
+        updatedRecurrenceType = baseType;
+        updatedRecurrenceInterval = baseInterval;
+        updatedRecurrenceEndDate = baseEndDate;
+      }
+    }
+
     // Handle fractional indexing for position updates
     if (prevPosition !== undefined || nextPosition !== undefined) {
       let newPosition;
@@ -515,7 +676,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateFields.push(`title = $${paramIndex++}`);
       updateValues.push(updatedTitle);
     }
-    if (updatedDescription !== null) {
+    if (shouldUpdateDescription) {
       updateFields.push(`description = $${paramIndex++}`);
       updateValues.push(updatedDescription);
     }
@@ -523,11 +684,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateFields.push(`status = $${paramIndex++}`);
       updateValues.push(updatedStatus);
     }
-    if (updatedStartDate !== null) {
+    if (shouldUpdateStartDate) {
       updateFields.push(`start_date = $${paramIndex++}`);
       updateValues.push(updatedStartDate);
     }
-    if (updatedDueDate !== null) {
+    if (shouldUpdateDueDate) {
       updateFields.push(`due_date = $${paramIndex++}`);
       updateValues.push(updatedDueDate);
     }
@@ -539,13 +700,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateFields.push(`position = $${paramIndex++}`);
       updateValues.push(updatedPosition);
     }
-    if (updatedParentTaskId !== null) {
+    if (shouldUpdateParentTaskId) {
       updateFields.push(`parent_task_id = $${paramIndex++}`);
       updateValues.push(updatedParentTaskId);
     }
     if (updatedTags !== null) {
       updateFields.push(`tags = $${paramIndex++}::jsonb`);
       updateValues.push(updatedTags);
+    }
+    if (shouldUpdateRecurrenceType) {
+      updateFields.push(`recurrence_type = $${paramIndex++}`);
+      updateValues.push(updatedRecurrenceType);
+    }
+    if (shouldUpdateRecurrenceInterval) {
+      updateFields.push(`recurrence_interval = $${paramIndex++}`);
+      updateValues.push(updatedRecurrenceInterval);
+    }
+    if (shouldUpdateRecurrenceEndDate) {
+      updateFields.push(`recurrence_end_date = $${paramIndex++}`);
+      updateValues.push(updatedRecurrenceEndDate);
     }
 
     updateFields.push(`updated_at = NOW()`);
@@ -565,7 +738,53 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     const result = await pool.query(queryText, updateValues);
 
-    res.json(result.rows[0]);
+    const previousTask = existingTask.rows[0];
+    const updatedTask = result.rows[0];
+
+    const shouldGenerateNextTask = (
+      previousTask.status !== 'done' &&
+      updatedTask.status === 'done' &&
+      updatedTask.recurrence_type &&
+      !updatedTask.parent_task_id
+    );
+
+    if (shouldGenerateNextTask) {
+      const recurrenceInterval = updatedTask.recurrence_interval || 1;
+      const nextDueDate = addRecurrenceToDate(updatedTask.due_date, updatedTask.recurrence_type, recurrenceInterval);
+      const nextStartDate = addRecurrenceToDate(updatedTask.start_date, updatedTask.recurrence_type, recurrenceInterval);
+      const nextAnchorDate = nextDueDate || nextStartDate;
+      const recurrenceEndDate = updatedTask.recurrence_end_date || null;
+      const isWithinRecurrenceWindow = !recurrenceEndDate || !nextAnchorDate || nextAnchorDate <= recurrenceEndDate;
+
+      if (isWithinRecurrenceWindow) {
+        await pool.query(
+          `INSERT INTO tasks (
+            project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id, tags,
+            recurrence_type, recurrence_interval, recurrence_end_date
+          ) VALUES ($1, $2, $3, $4, 'todo', $5, $6, $7, NULL, $8::jsonb, $9, $10, $11)`,
+          [
+            updatedTask.project_id,
+            req.userId,
+            updatedTask.title,
+            updatedTask.description,
+            nextStartDate,
+            nextDueDate,
+            updatedTask.priority || 'medium',
+            JSON.stringify(updatedTask.tags || []),
+            updatedTask.recurrence_type,
+            recurrenceInterval,
+            recurrenceEndDate
+          ]
+        );
+
+        await pool.query(
+          'UPDATE tasks SET last_generated_at = NOW() WHERE id = $1 AND user_id = $2',
+          [updatedTask.id, req.userId]
+        );
+      }
+    }
+
+    res.json(updatedTask);
   } catch (error) {
     console.error('Error updating task:', error);
     console.error('Error details:', error.message, error.stack);

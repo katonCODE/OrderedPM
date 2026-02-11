@@ -62,6 +62,13 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     }
   };
 
+  const formatRecurrence = (task) => {
+    if (!task?.recurrence_type) return null;
+    const interval = task.recurrence_interval || 1;
+    const unit = task.recurrence_type.charAt(0).toUpperCase() + task.recurrence_type.slice(1);
+    return interval > 1 ? `Every ${interval} ${unit}` : `Every ${unit}`;
+  };
+
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ zIndex: 99999 }}>
       <div className="relative w-full max-w-2xl my-auto">
@@ -102,6 +109,18 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                   </span>
                 </div>
               </div>
+
+              {currentTask.recurrence_type && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Recurrence</h3>
+                  <p className="text-[#e0e0e0]">{formatRecurrence(currentTask)}</p>
+                  {currentTask.recurrence_end_date && (
+                    <p className="text-sm text-gray-400 mt-1">
+                      Ends on {formatDate(currentTask.recurrence_end_date)}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {(currentTask.start_date || currentTask.due_date) && (
                 <div className="grid grid-cols-2 gap-4">

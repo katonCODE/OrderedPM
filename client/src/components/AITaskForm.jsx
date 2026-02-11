@@ -1,5 +1,6 @@
 // client/src/components/AITaskForm.jsx
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { tasksAPI } from '../services/api';
 import './TaskForm.css';
 
@@ -40,7 +41,7 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!title.trim()) {
       setError('Please generate a task first or enter a title');
       return;
@@ -71,11 +72,11 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
     }
   };
 
-  return (
+  const modalContent = (
     <div className="form-overlay">
       <div className="form-card">
         <h2>AI Task Creation</h2>
-        
+
         <form onSubmit={handleSubmit}>
           {!isGenerated ? (
             <>
@@ -98,10 +99,10 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
                 <button type="button" onClick={onCancel} className="btn-secondary" disabled={isGenerating}>
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  onClick={handleGenerate} 
-                  className="btn-primary" 
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  className="btn-primary"
                   disabled={isGenerating || !prompt.trim()}
                 >
                   {isGenerating ? 'Generating...' : 'Generate'}
@@ -170,8 +171,8 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
               {error && <div className="error-message">{error}</div>}
 
               <div className="form-actions">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => {
                     setIsGenerated(false);
                     setTitle('');
@@ -181,8 +182,8 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
                     setStartDate('');
                     setPrompt('');
                     setError('');
-                  }} 
-                  className="btn-secondary" 
+                  }}
+                  className="btn-secondary"
                   disabled={isSubmitting}
                 >
                   Start Over
@@ -197,6 +198,8 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 export default AITaskForm;

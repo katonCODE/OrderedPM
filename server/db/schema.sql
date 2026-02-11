@@ -21,8 +21,20 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
     due_date DATE,
+    start_date DATE,
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
+    position DOUBLE PRECISION,
     parent_task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    recurrence_type TEXT CHECK (
+        recurrence_type IN ('daily', 'weekly', 'monthly')
+    ),
+    recurrence_interval INTEGER DEFAULT 1 CHECK (
+        recurrence_interval IS NULL
+        OR recurrence_interval >= 1
+    ),
+    recurrence_end_date DATE,
+    last_generated_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT check_no_self_parent CHECK (

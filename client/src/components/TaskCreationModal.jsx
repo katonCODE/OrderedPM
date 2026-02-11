@@ -1,8 +1,9 @@
 // client/src/components/TaskCreationModal.jsx
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 function TaskCreationModal({ onSelectManual, onSelectAI, onClose }) {
-  return (
+  const modalContent = (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={onClose}>
       <div className="relative w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
         {/* Glassmorphism Card */}
@@ -50,6 +51,8 @@ function TaskCreationModal({ onSelectManual, onSelectAI, onClose }) {
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
 export default TaskCreationModal;
