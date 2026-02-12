@@ -1,10 +1,9 @@
 // client/src/components/Dashboard.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
 import { getMyProfile } from '../services/profile';
-import { authService } from '../services/auth';
 import { exportAllData } from '../utils/export';
 import { parseJSONFile, parseCSVFile, extractProjectsFromJSON, extractProjectsFromCSV, extractTasksFromJSON, extractTasksFromCSV, validateProjectData, validateTaskData } from '../utils/import';
 import ProjectList from './ProjectList';
@@ -12,6 +11,7 @@ import ProjectForm from './ProjectForm';
 import ConfirmDialog from './ConfirmDialog';
 import Pagination from './Pagination';
 import GlobalTaskSearch from './GlobalTaskSearch';
+import QuickAddTaskForm from './QuickAddTaskForm';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -27,6 +27,8 @@ function Dashboard({ onLogout }) {
   const [filter, setFilter] = useState('all');
   const [sortBy, setSortBy] = useState('updated');
   const [showArchived, setShowArchived] = useState(false);
+  const [activeTab, setActiveTab] = useState('projects');
+  const [showQuickAddForm, setShowQuickAddForm] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
@@ -58,8 +60,28 @@ function Dashboard({ onLogout }) {
     placeholderData: (previousData) => previousData,
   });
 
+  const { data: allProjectsData } = useQuery({
+    queryKey: ['projects', 'all-for-dashboard'],
+    queryFn: () => projectsAPI.getAll({
+      limit: 1000,
+      offset: 0,
+      includeCount: false,
+      includeArchived: true
+    }),
+    placeholderData: (previousData) => previousData,
+  });
+
   const allProjects = projectsData?.data || projectsData || [];
   const allTasks = tasksData?.data || [];
+  const allProjectsWithArchived = allProjectsData?.data || allProjectsData || [];
+  const activeProjectsForQuickAdd = useMemo(
+    () => allProjectsWithArchived.filter(project => !project.archived),
+    [allProjectsWithArchived]
+  );
+  const projectNameById = useMemo(
+    () => new Map(allProjectsWithArchived.map(project => [project.id, project.name])),
+    [allProjectsWithArchived]
+  );
 
   const error = queryError?.message || '';
 
@@ -152,6 +174,21 @@ function Dashboard({ onLogout }) {
   }, [filteredAndSortedProjects, currentPage]);
 
   const totalPages = Math.ceil(filteredAndSortedProjects.length / itemsPerPage);
+  const todayString = new Date().toISOString().slice(0, 10);
+
+  const upcomingDueSoonTasks = useMemo(() => {
+    const activeProjectIds = new Set(activeProjectsForQuickAdd.map(project => project.id));
+    return allTasks
+      .filter(task =>
+        !task.parent_task_id &&
+        task.status !== 'done' &&
+        task.due_date &&
+        activeProjectIds.has(task.project_id) &&
+        String(task.due_date).slice(0, 10) >= todayString
+      )
+      .sort((a, b) => String(a.due_date).slice(0, 10).localeCompare(String(b.due_date).slice(0, 10)))
+      .slice(0, 5);
+  }, [allTasks, activeProjectsForQuickAdd, todayString]);
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -358,6 +395,20 @@ function Dashboard({ onLogout }) {
     e.target.value = '';
   };
 
+  const handleQuickAddTask = async (taskData) => {
+    await tasksAPI.create({
+      project_id: taskData.project_id,
+      title: taskData.title,
+      due_date: taskData.due_date,
+      status: 'todo',
+      priority: 'medium',
+      tags: [],
+    });
+    queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+    queryClient.invalidateQueries({ queryKey: ['projects'] });
+    setShowQuickAddForm(false);
+  };
+
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
       {/* Background gradient effects */}
@@ -415,9 +466,33 @@ function Dashboard({ onLogout }) {
       {/* Main Content */}
       <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">My Projects</h2>
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">
+              {activeTab === 'today' ? 'Upcoming Tasks' : 'My Projects'}
+            </h2>
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => setActiveTab('projects')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'projects'
+                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                  }`}
+              >
+                Projects
+              </button>
+              <button
+                onClick={() => setActiveTab('today')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'today'
+                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                  }`}
+              >
+                Upcoming Tasks
+              </button>
+            </div>
+          </div>
           <div className="flex gap-3">
-            {allProjects.length > 0 && (
+            {allProjects.length > 0 && activeTab === 'projects' && (
               <div className="relative group">
                 <button
                   className="px-4 py-3 bg-white/5 border border-white/10 text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all flex items-center gap-2"
@@ -458,6 +533,12 @@ function Dashboard({ onLogout }) {
                 {importing ? '⏳ Importing...' : '📤 Import Projects'}
               </label>
             </div>
+            <button
+              onClick={() => setShowQuickAddForm(true)}
+              className="px-6 py-3 bg-gradient-to-r from-blue-400 to-blue-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-blue-300 hover:to-blue-400 transition-all shadow-lg shadow-blue-500/20"
+            >
+              + Quick Add Task
+            </button>
             <button
               onClick={() => setShowForm(true)}
               className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
@@ -527,90 +608,135 @@ function Dashboard({ onLogout }) {
               </div>
             </div>
 
-            {/* Search, Filter, and Sort Bar */}
-            <div className="sticky top-0 z-20 backdrop-blur-xl bg-[#1a1a1a]/80 border border-white/10 rounded-lg p-4 mb-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    placeholder="Search projects..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                  />
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {['all', 'active', 'recent'].map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => {
-                        setFilter(f);
+            {activeTab === 'projects' ? (
+              <>
+                {/* Search, Filter, and Sort Bar */}
+                <div className="sticky top-0 z-20 backdrop-blur-xl bg-[#1a1a1a]/80 border border-white/10 rounded-lg p-4 mb-6">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search projects..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                      />
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {['all', 'active', 'recent'].map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => {
+                            setFilter(f);
+                            setCurrentPage(1);
+                          }}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f
+                            ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                            : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                            }`}
+                        >
+                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setShowArchived(!showArchived);
+                          setCurrentPage(1);
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${showArchived
+                          ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
+                          : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                          }`}
+                      >
+                        {showArchived ? '📦 Archived' : '📁 Active'}
+                      </button>
+                    </div>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => {
+                        setSortBy(e.target.value);
                         setCurrentPage(1);
                       }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f
-                        ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
-                        }`}
+                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
                     >
-                      {f.charAt(0).toUpperCase() + f.slice(1)}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => {
-                      setShowArchived(!showArchived);
-                      setCurrentPage(1);
-                    }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${showArchived
-                      ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
-                      : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
-                      }`}
-                  >
-                    {showArchived ? '📦 Archived' : '📁 Active'}
-                  </button>
+                      <option value="updated">Last Updated</option>
+                      <option value="name">Name (A-Z)</option>
+                      <option value="created_new">Date Created (Newest)</option>
+                      <option value="created_old">Date Created (Oldest)</option>
+                      <option value="tasks">Task Count</option>
+                    </select>
+                  </div>
                 </div>
-                <select
-                  value={sortBy}
-                  onChange={(e) => {
-                    setSortBy(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                >
-                  <option value="updated">Last Updated</option>
-                  <option value="name">Name (A-Z)</option>
-                  <option value="created_new">Date Created (Newest)</option>
-                  <option value="created_old">Date Created (Oldest)</option>
-                  <option value="tasks">Task Count</option>
-                </select>
-              </div>
-            </div>
 
-            <ProjectList
-              projects={paginatedProjects}
-              allTasks={allTasks}
-              onEdit={handleEditClick}
-              onDelete={handleDeleteClick}
-              onArchive={handleArchiveClick}
-              onRestore={handleRestoreClick}
-              showArchived={showArchived}
-            />
-            {totalPages > 1 && (
-              <div className="mt-8">
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={setCurrentPage}
-                  itemsPerPage={itemsPerPage}
-                  totalItems={filteredAndSortedProjects.length}
-                  hasMore={currentPage < totalPages}
-                  isLoading={isFetching}
+                <ProjectList
+                  projects={paginatedProjects}
+                  allTasks={allTasks}
+                  onEdit={handleEditClick}
+                  onDelete={handleDeleteClick}
+                  onArchive={handleArchiveClick}
+                  onRestore={handleRestoreClick}
+                  showArchived={showArchived}
                 />
+                {totalPages > 1 && (
+                  <div className="mt-8">
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                      itemsPerPage={itemsPerPage}
+                      totalItems={filteredAndSortedProjects.length}
+                      hasMore={currentPage < totalPages}
+                      isLoading={isFetching}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-xl font-semibold text-[#e0e0e0]">Next 5 upcoming tasks</h3>
+                  <span className="text-xs text-gray-500">Across all active projects</span>
+                </div>
+                {upcomingDueSoonTasks.length === 0 ? (
+                  <p className="text-gray-400">No upcoming due tasks right now.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {upcomingDueSoonTasks.map((task) => (
+                      <Link
+                        key={task.id}
+                        to={`/project/${task.project_id}`}
+                        state={{ openTaskId: task.id }}
+                        className="block p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <div className="text-[#e0e0e0] font-medium">{task.title}</div>
+                            <div className="text-sm text-gray-400">
+                              {projectNameById.get(task.project_id) || 'Unknown Project'}
+                            </div>
+                          </div>
+                          <div className="text-sm text-yellow-400">
+                            Due {String(task.due_date).slice(0, 10)}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>
+        )}
+
+        {showQuickAddForm && (
+          <QuickAddTaskForm
+            projects={activeProjectsForQuickAdd}
+            onSubmit={handleQuickAddTask}
+            onCancel={() => setShowQuickAddForm(false)}
+          />
         )}
 
         <ConfirmDialog
