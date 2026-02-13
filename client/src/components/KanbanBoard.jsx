@@ -346,6 +346,16 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                                         {formatRecurrence(task)}
                                       </span>
                                     )}
+                                    {task.blocked_by_count > 0 && (
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                                        Blocked by {task.blocked_by_count}
+                                      </span>
+                                    )}
+                                    {task.blocking_count > 0 && (
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                                        Blocking {task.blocking_count}
+                                      </span>
+                                    )}
                                   </div>
                                   {task.tags && Array.isArray(task.tags) && task.tags.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-2">

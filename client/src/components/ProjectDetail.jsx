@@ -30,6 +30,7 @@ function ProjectDetail() {
   const [selectedPriority, setSelectedPriority] = useState(null);
   const [sortByPriority, setSortByPriority] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [actionError, setActionError] = useState('');
   const exportMenuRef = useRef(null);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
@@ -109,6 +110,7 @@ function ProjectDetail() {
 
   const handleCreateTask = async (taskData) => {
     try {
+      setActionError('');
       await tasksAPI.create(taskData);
       // Invalidate query to refetch with proper format (including subtasks)
       queryClient.invalidateQueries({ queryKey: ['tasks', id] });
@@ -121,6 +123,7 @@ function ProjectDetail() {
 
   const handleUpdateTask = async (taskId, taskData) => {
     try {
+      setActionError('');
       await tasksAPI.update(taskId, taskData);
       // Invalidate query to refetch with proper format (including subtasks)
       queryClient.invalidateQueries({ queryKey: ['tasks', id] });
@@ -136,6 +139,7 @@ function ProjectDetail() {
       return;
     }
     try {
+      setActionError('');
       await tasksAPI.delete(taskId);
       queryClient.setQueryData(['tasks', id], (old) => {
         const oldArray = Array.isArray(old) ? old : old?.data || [];
@@ -198,6 +202,7 @@ function ProjectDetail() {
       if (context?.previousTasks) {
         queryClient.setQueryData(['tasks', id], context.previousTasks);
       }
+      setActionError(err?.message || 'Failed to update task status');
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', id] });
@@ -272,6 +277,7 @@ function ProjectDetail() {
       if (context?.previousTasks) {
         queryClient.setQueryData(['tasks', id], context.previousTasks);
       }
+      setActionError(err?.message || 'Failed to move task');
       // If status was being updated and position update failed, try status update as fallback
       if (variables.status !== undefined && variables.status !== tasks.find(t => t.id === variables.taskId)?.status) {
         const task = tasks.find(t => t.id === variables.taskId);
@@ -286,6 +292,7 @@ function ProjectDetail() {
   });
 
   const handleStatusChange = (taskId, newStatus) => {
+    setActionError('');
     const task = tasks.find(t => t.id === taskId);
     if (task) {
       statusUpdateMutation.mutate({ taskId, newStatus, task });
@@ -293,6 +300,7 @@ function ProjectDetail() {
   };
 
   const handlePositionChange = (taskId, prevPosition, nextPosition, status) => {
+    setActionError('');
     positionUpdateMutation.mutate({ taskId, prevPosition, nextPosition, status });
   };
 
@@ -484,9 +492,9 @@ function ProjectDetail() {
           </button>
         </div>
 
-        {error && (
+        {(error || actionError) && (
           <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
-            {error}
+            {error || actionError}
           </div>
         )}
 

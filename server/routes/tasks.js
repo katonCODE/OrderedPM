@@ -37,6 +37,31 @@ const addRecurrenceToDate = (dateString, recurrenceType, recurrenceInterval) => 
   return formatDateOnly(date);
 };
 
+const getTaskDependencies = async (taskId, userId) => {
+  const blockedByResult = await pool.query(
+    `SELECT t.id, t.title, t.status
+     FROM task_dependencies td
+     JOIN tasks t ON t.id = td.blocker_task_id
+     WHERE td.blocked_task_id = $1 AND t.user_id = $2
+     ORDER BY t.created_at ASC`,
+    [taskId, userId]
+  );
+
+  const blockingResult = await pool.query(
+    `SELECT t.id, t.title, t.status
+     FROM task_dependencies td
+     JOIN tasks t ON t.id = td.blocked_task_id
+     WHERE td.blocker_task_id = $1 AND t.user_id = $2
+     ORDER BY t.created_at ASC`,
+    [taskId, userId]
+  );
+
+  return {
+    blocked_by: blockedByResult.rows,
+    blocking: blockingResult.rows
+  };
+};
+
 // Get all tasks for the authenticated user (for dashboard stats)
 router.get('/user/all', authenticateToken, async (req, res) => {
   try {
@@ -85,6 +110,16 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT 
         t.*,
+        (
+          SELECT COUNT(*)
+          FROM task_dependencies td
+          WHERE td.blocked_task_id = t.id
+        ) AS blocked_by_count,
+        (
+          SELECT COUNT(*)
+          FROM task_dependencies td
+          WHERE td.blocker_task_id = t.id
+        ) AS blocking_count,
         COUNT(st.id) FILTER (WHERE st.status = 'done') as completed_subtasks,
         COUNT(st.id) as total_subtasks
       FROM tasks t
@@ -112,6 +147,8 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
       const taskSubtasks = subtasks.filter(st => st.parent_task_id === task.id);
       return {
         ...task,
+        blocked_by_count: parseInt(task.blocked_by_count) || 0,
+        blocking_count: parseInt(task.blocking_count) || 0,
         completed_subtasks: parseInt(task.completed_subtasks) || 0,
         total_subtasks: parseInt(task.total_subtasks) || 0,
         subtasks: taskSubtasks
@@ -164,6 +201,16 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT 
         t.*,
+        (
+          SELECT COUNT(*)
+          FROM task_dependencies td
+          WHERE td.blocked_task_id = t.id
+        ) AS blocked_by_count,
+        (
+          SELECT COUNT(*)
+          FROM task_dependencies td
+          WHERE td.blocker_task_id = t.id
+        ) AS blocking_count,
         COUNT(st.id) FILTER (WHERE st.status = 'done') as completed_subtasks,
         COUNT(st.id) as total_subtasks
       FROM tasks t
@@ -187,6 +234,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     res.json({
       ...task,
+      blocked_by_count: parseInt(task.blocked_by_count) || 0,
+      blocking_count: parseInt(task.blocking_count) || 0,
       completed_subtasks: parseInt(task.completed_subtasks) || 0,
       total_subtasks: parseInt(task.total_subtasks) || 0,
       subtasks: subtasksResult.rows
@@ -220,6 +269,127 @@ router.get('/:id/subtasks', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching subtasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/:id/dependencies', authenticateToken, async (req, res) => {
+  try {
+    const taskCheck = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const dependencies = await getTaskDependencies(req.params.id, req.userId);
+    res.json(dependencies);
+  } catch (error) {
+    console.error('Error fetching task dependencies:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/dependencies', authenticateToken, async (req, res) => {
+  try {
+    const { blocker_task_id } = req.body;
+
+    if (!blocker_task_id) {
+      return res.status(400).json({ error: 'Blocker task ID is required' });
+    }
+
+    if (blocker_task_id === req.params.id) {
+      return res.status(400).json({ error: 'A task cannot depend on itself' });
+    }
+
+    const taskResult = await pool.query(
+      'SELECT id, project_id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const blockerResult = await pool.query(
+      'SELECT id, project_id FROM tasks WHERE id = $1 AND user_id = $2',
+      [blocker_task_id, req.userId]
+    );
+    if (blockerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Blocker task not found' });
+    }
+
+    const taskProjectId = taskResult.rows[0].project_id;
+    const blockerProjectId = blockerResult.rows[0].project_id;
+
+    if (taskProjectId !== blockerProjectId) {
+      return res.status(400).json({ error: 'Dependencies must be within the same project' });
+    }
+
+    const cycleResult = await pool.query(
+      `WITH RECURSIVE reachable AS (
+        SELECT blocked_task_id
+        FROM task_dependencies
+        WHERE blocker_task_id = $1
+        UNION
+        SELECT td.blocked_task_id
+        FROM task_dependencies td
+        JOIN reachable r ON td.blocker_task_id = r.blocked_task_id
+      )
+      SELECT 1
+      FROM reachable
+      WHERE blocked_task_id = $2
+      LIMIT 1`,
+      [req.params.id, blocker_task_id]
+    );
+
+    if (cycleResult.rows.length > 0) {
+      return res.status(400).json({ error: 'This dependency would create a cycle' });
+    }
+
+    await pool.query(
+      `INSERT INTO task_dependencies (blocked_task_id, blocker_task_id)
+       VALUES ($1, $2)
+       ON CONFLICT (blocked_task_id, blocker_task_id) DO NOTHING`,
+      [req.params.id, blocker_task_id]
+    );
+
+    const dependencies = await getTaskDependencies(req.params.id, req.userId);
+    res.status(201).json(dependencies);
+  } catch (error) {
+    console.error('Error adding task dependency:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:id/dependencies/:blockerId', authenticateToken, async (req, res) => {
+  try {
+    const taskCheck = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const blockerCheck = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.blockerId, req.userId]
+    );
+    if (blockerCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Blocker task not found' });
+    }
+
+    await pool.query(
+      'DELETE FROM task_dependencies WHERE blocked_task_id = $1 AND blocker_task_id = $2',
+      [req.params.id, req.params.blockerId]
+    );
+
+    const dependencies = await getTaskDependencies(req.params.id, req.userId);
+    res.json(dependencies);
+  } catch (error) {
+    console.error('Error removing task dependency:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -528,6 +698,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     if (status !== undefined) {
       if (['todo', 'in_progress', 'done'].includes(status)) {
+        if (status === 'done' && existingTask.rows[0].status !== 'done') {
+          const blockersResult = await pool.query(
+            `SELECT t.id, t.title
+             FROM task_dependencies td
+             JOIN tasks t ON t.id = td.blocker_task_id
+             WHERE td.blocked_task_id = $1
+               AND t.user_id = $2
+               AND t.status != 'done'
+             ORDER BY t.created_at ASC`,
+            [req.params.id, req.userId]
+          );
+
+          if (blockersResult.rows.length > 0) {
+            return res.status(400).json({
+              error: `Task is blocked by: ${blockersResult.rows.map(t => t.title).join(', ')}`
+            });
+          }
+        }
+
         updatedStatus = status;
       } else {
         return res.status(400).json({ error: 'Invalid status value' });

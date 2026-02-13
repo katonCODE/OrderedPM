@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS tasks (
         OR parent_task_id IS NULL
     )
 );
+CREATE TABLE IF NOT EXISTS task_dependencies (
+    blocked_task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    blocker_task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (blocked_task_id, blocker_task_id),
+    CONSTRAINT check_no_self_dependency CHECK (blocked_task_id != blocker_task_id)
+);
 -- Profiles table
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -62,6 +69,8 @@ CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_blocked_task_id ON task_dependencies(blocked_task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_blocker_task_id ON task_dependencies(blocker_task_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW();
@@ -92,6 +101,7 @@ INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 -- Enable Row Level Security
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_dependencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for projects
 -- Users can only see their own projects
@@ -117,6 +127,39 @@ CREATE POLICY "Users can update their own tasks" ON tasks FOR
 UPDATE USING (auth.uid() = user_id);
 -- Users can delete their own tasks
 CREATE POLICY "Users can delete their own tasks" ON tasks FOR DELETE USING (auth.uid() = user_id);
+-- RLS Policies for task_dependencies
+CREATE POLICY "Users can view their own task dependencies" ON task_dependencies FOR
+SELECT USING (
+        EXISTS (
+            SELECT 1
+            FROM tasks t
+            WHERE t.id = task_dependencies.blocked_task_id
+                AND t.user_id = auth.uid()
+        )
+    );
+CREATE POLICY "Users can create their own task dependencies" ON task_dependencies FOR
+INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM tasks t1
+            WHERE t1.id = task_dependencies.blocked_task_id
+                AND t1.user_id = auth.uid()
+        )
+        AND EXISTS (
+            SELECT 1
+            FROM tasks t2
+            WHERE t2.id = task_dependencies.blocker_task_id
+                AND t2.user_id = auth.uid()
+        )
+    );
+CREATE POLICY "Users can delete their own task dependencies" ON task_dependencies FOR DELETE USING (
+    EXISTS (
+        SELECT 1
+        FROM tasks t
+        WHERE t.id = task_dependencies.blocked_task_id
+            AND t.user_id = auth.uid()
+    )
+);
 -- RLS Policies for profiles
 -- Users can view their own profile
 CREATE POLICY "Users can view their own profile" ON profiles FOR

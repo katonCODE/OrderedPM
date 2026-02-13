@@ -1,12 +1,14 @@
 // client/src/components/TaskView.jsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tasksAPI } from '../services/api';
 import SubtaskList from './SubtaskList';
 
 function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
   const queryClient = useQueryClient();
+  const [selectedBlockerId, setSelectedBlockerId] = useState('');
+  const [dependencyError, setDependencyError] = useState('');
 
   // Use useQuery to automatically subscribe to task updates
   const { data: currentTask } = useQuery({
@@ -17,6 +19,47 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     refetchOnWindowFocus: false,
   });
 
+  const { data: dependencies } = useQuery({
+    queryKey: ['task-dependencies', task?.id],
+    queryFn: () => tasksAPI.getDependencies(task.id),
+    enabled: !!task?.id,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: projectTasksData } = useQuery({
+    queryKey: ['tasks', currentTask?.project_id],
+    queryFn: () => tasksAPI.getByProject(currentTask.project_id, { limit: 1000, offset: 0 }),
+    enabled: !!currentTask?.project_id,
+    refetchOnWindowFocus: false,
+  });
+
+  const addDependencyMutation = useMutation({
+    mutationFn: (blockerTaskId) => tasksAPI.addDependency(currentTask.id, blockerTaskId),
+    onSuccess: () => {
+      setDependencyError('');
+      setSelectedBlockerId('');
+      queryClient.invalidateQueries({ queryKey: ['task-dependencies', currentTask.id] });
+      queryClient.invalidateQueries({ queryKey: ['task', currentTask.id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', currentTask.project_id] });
+    },
+    onError: (error) => {
+      setDependencyError(error?.message || 'Failed to add dependency');
+    },
+  });
+
+  const removeDependencyMutation = useMutation({
+    mutationFn: (blockerTaskId) => tasksAPI.removeDependency(currentTask.id, blockerTaskId),
+    onSuccess: () => {
+      setDependencyError('');
+      queryClient.invalidateQueries({ queryKey: ['task-dependencies', currentTask.id] });
+      queryClient.invalidateQueries({ queryKey: ['task', currentTask.id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', currentTask.project_id] });
+    },
+    onError: (error) => {
+      setDependencyError(error?.message || 'Failed to remove dependency');
+    },
+  });
+
   // Update parent when task changes
   useEffect(() => {
     if (currentTask && onTaskUpdate) {
@@ -24,7 +67,25 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     }
   }, [currentTask, onTaskUpdate]);
 
+  useEffect(() => {
+    setSelectedBlockerId('');
+    setDependencyError('');
+  }, [task?.id]);
+
   if (!currentTask) return null;
+
+  const blockedBy = dependencies?.blocked_by || [];
+  const blocking = dependencies?.blocking || [];
+  const projectTasks = projectTasksData?.data || projectTasksData || [];
+
+  const availableBlockers = useMemo(() => {
+    const existingBlockerIds = new Set(blockedBy.map(dep => dep.id));
+    return projectTasks.filter(
+      (projectTask) =>
+        projectTask.id !== currentTask.id &&
+        !existingBlockerIds.has(projectTask.id)
+    );
+  }, [blockedBy, currentTask.id, projectTasks]);
 
   const formatPriority = (priority) => {
     if (!priority) return 'Medium';
@@ -107,6 +168,75 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                   <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium border ${getPriorityColor(currentTask.priority)}`}>
                     {formatPriority(currentTask.priority)}
                   </span>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-400 mb-2">Dependencies</h3>
+                {dependencyError && (
+                  <p className="text-xs text-red-400 mb-3">{dependencyError}</p>
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Blocked by</p>
+                    {blockedBy.length === 0 ? (
+                      <p className="text-sm text-gray-500">No blockers</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {blockedBy.map((dep) => (
+                          <div key={dep.id} className="flex items-center justify-between gap-3 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                            <span className="text-sm text-[#e0e0e0]">{dep.title}</span>
+                            <button
+                              onClick={() => removeDependencyMutation.mutate(dep.id)}
+                              disabled={removeDependencyMutation.isPending}
+                              className="px-2 py-1 text-xs text-orange-300 border border-orange-500/30 rounded hover:bg-orange-500/20 transition-all disabled:opacity-50"
+                              title="Remove blocker"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {availableBlockers.length > 0 && (
+                      <div className="flex gap-2 mt-3">
+                        <select
+                          value={selectedBlockerId}
+                          onChange={(e) => setSelectedBlockerId(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                        >
+                          <option value="">Select blocker task</option>
+                          {availableBlockers.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.title}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => selectedBlockerId && addDependencyMutation.mutate(selectedBlockerId)}
+                          disabled={!selectedBlockerId || addDependencyMutation.isPending}
+                          className="px-3 py-2 bg-orange-500/20 border border-orange-500/30 rounded-lg text-sm text-orange-300 hover:bg-orange-500/30 transition-all disabled:opacity-50"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Blocking</p>
+                    {blocking.length === 0 ? (
+                      <p className="text-sm text-gray-500">Not blocking any tasks</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {blocking.map((dep) => (
+                          <div key={dep.id} className="p-2 bg-gray-500/10 border border-gray-500/20 rounded-lg">
+                            <span className="text-sm text-[#e0e0e0]">{dep.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -64,6 +64,8 @@ export interface Task {
   subtasks?: Task[]; // Array of child tasks
   completed_subtasks?: number; // Count of completed subtasks
   total_subtasks?: number; // Total count of subtasks
+  blocked_by_count?: number; // Count of tasks this task depends on
+  blocking_count?: number; // Count of tasks blocked by this task
 }
 
 // Type helpers for creating/updating entities

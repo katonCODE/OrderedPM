@@ -359,5 +359,43 @@ export const tasksAPI = {
       throw error;
     }
   },
+
+  getDependencies: async (taskId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/dependencies`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  addDependency: async (taskId, blockerTaskId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/dependencies`, {
+        method: 'POST',
+        body: JSON.stringify({ blocker_task_id: blockerTaskId }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  removeDependency: async (taskId, blockerTaskId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/dependencies/${blockerTaskId}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 
