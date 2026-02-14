@@ -58,6 +58,9 @@ export interface Task {
   recurrence_interval: number | null;
   recurrence_end_date: string | null; // ISO date string (YYYY-MM-DD)
   last_generated_at: string | null; // ISO timestamp string
+  estimated_minutes: number | null;
+  planned_for_date: string | null; // ISO date string (YYYY-MM-DD)
+  plan_pinned: boolean;
   created_at: string; // ISO timestamp string
   updated_at: string; // ISO timestamp string
   // Computed fields (not in DB, added by frontend/backend)

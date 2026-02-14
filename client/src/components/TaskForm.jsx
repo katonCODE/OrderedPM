@@ -15,6 +15,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
   const [recurrenceType, setRecurrenceType] = useState('');
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
+  const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,6 +31,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setRecurrenceType(task.recurrence_type || '');
       setRecurrenceInterval(task.recurrence_interval || 1);
       setRecurrenceEndDate(task.recurrence_end_date ? task.recurrence_end_date.split('T')[0] : '');
+      setEstimatedMinutes(task.estimated_minutes ? String(task.estimated_minutes) : '');
     } else {
       // Reset form when creating a new task
       setTitle('');
@@ -42,6 +44,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
       setRecurrenceType('');
       setRecurrenceInterval(1);
       setRecurrenceEndDate('');
+      setEstimatedMinutes('');
     }
   }, [task]);
 
@@ -62,6 +65,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
         recurrence_type: recurrenceType || null,
         recurrence_interval: recurrenceType ? Math.max(1, Number(recurrenceInterval) || 1) : null,
         recurrence_end_date: recurrenceType ? (recurrenceEndDate || null) : null,
+        estimated_minutes: estimatedMinutes ? Math.max(1, Number(estimatedMinutes) || 1) : null,
       };
 
       if (task) {
@@ -214,6 +218,22 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
                     className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="task-estimated-minutes" className="block text-sm font-medium text-gray-400 mb-2">
+                  Estimated Minutes
+                </label>
+                <input
+                  id="task-estimated-minutes"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={estimatedMinutes}
+                  onChange={(e) => setEstimatedMinutes(e.target.value)}
+                  placeholder="e.g. 30"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

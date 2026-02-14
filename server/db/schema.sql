@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     ),
     recurrence_end_date DATE,
     last_generated_at TIMESTAMP WITH TIME ZONE,
+    estimated_minutes INTEGER CHECK (
+        estimated_minutes IS NULL
+        OR estimated_minutes >= 1
+    ),
+    planned_for_date DATE,
+    plan_pinned BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT check_no_self_parent CHECK (
@@ -69,6 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_planned_for_date ON tasks(planned_for_date);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_blocked_task_id ON task_dependencies(blocked_task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_blocker_task_id ON task_dependencies(blocker_task_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);

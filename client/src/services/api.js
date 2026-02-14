@@ -280,6 +280,31 @@ export const tasksAPI = {
     }
   },
 
+  getToday: async () => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/today`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  generateTodayPlan: async ({ time_budget_minutes, pinned_task_ids = [], save = false } = {}) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/today/plan`, {
+        method: 'POST',
+        body: JSON.stringify({ time_budget_minutes, pinned_task_ids, save }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
   create: async (data) => {
     try {
       return await fetchWithAuth(`${API_URL}/api/tasks`, {

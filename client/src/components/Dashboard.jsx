@@ -29,6 +29,13 @@ function Dashboard({ onLogout }) {
   const [showArchived, setShowArchived] = useState(false);
   const [activeTab, setActiveTab] = useState('projects');
   const [showQuickAddForm, setShowQuickAddForm] = useState(false);
+  const [todayPlanTimeBudget, setTodayPlanTimeBudget] = useState(120);
+  const [todayPlanPinnedTaskIds, setTodayPlanPinnedTaskIds] = useState([]);
+  const [todayPlanPreview, setTodayPlanPreview] = useState(null);
+  const [todayPlanLoading, setTodayPlanLoading] = useState(false);
+  const [todayPlanSaving, setTodayPlanSaving] = useState(false);
+  const [todayPlanError, setTodayPlanError] = useState('');
+  const [todayPlanSuccess, setTodayPlanSuccess] = useState('');
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
@@ -71,9 +78,16 @@ function Dashboard({ onLogout }) {
     placeholderData: (previousData) => previousData,
   });
 
+  const { data: todayTasksData, refetch: refetchTodayTasks } = useQuery({
+    queryKey: ['tasks', 'today'],
+    queryFn: () => tasksAPI.getToday(),
+    placeholderData: (previousData) => previousData,
+  });
+
   const allProjects = projectsData?.data || projectsData || [];
   const allTasks = tasksData?.data || [];
   const allProjectsWithArchived = allProjectsData?.data || allProjectsData || [];
+  const todaySavedTasks = todayTasksData?.data || [];
   const activeProjectsForQuickAdd = useMemo(
     () => allProjectsWithArchived.filter(project => !project.archived),
     [allProjectsWithArchived]
@@ -175,7 +189,6 @@ function Dashboard({ onLogout }) {
 
   const totalPages = Math.ceil(filteredAndSortedProjects.length / itemsPerPage);
   const todayString = new Date().toISOString().slice(0, 10);
-
   const upcomingDueSoonTasks = useMemo(() => {
     const activeProjectIds = new Set(activeProjectsForQuickAdd.map(project => project.id));
     return allTasks
@@ -189,6 +202,50 @@ function Dashboard({ onLogout }) {
       .sort((a, b) => String(a.due_date).slice(0, 10).localeCompare(String(b.due_date).slice(0, 10)))
       .slice(0, 5);
   }, [allTasks, activeProjectsForQuickAdd, todayString]);
+  const toggleTodayPin = (taskId) => {
+    setTodayPlanPinnedTaskIds((prev) =>
+      prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const getPlanReasonLabel = (reason) => {
+    if (reason === 'pinned') return 'Pinned';
+    if (reason === 'best_fit') return 'Best fit';
+    if (reason === 'over_budget') return 'Over budget';
+    return 'Auto plan';
+  };
+
+  const handleGenerateTodayPlan = async ({ save } = { save: false }) => {
+    const budget = Math.max(1, Number(todayPlanTimeBudget) || 120);
+    setTodayPlanError('');
+    setTodayPlanSuccess('');
+    if (save) {
+      setTodayPlanSaving(true);
+    } else {
+      setTodayPlanLoading(true);
+    }
+
+    try {
+      const response = await tasksAPI.generateTodayPlan({
+        time_budget_minutes: budget,
+        pinned_task_ids: todayPlanPinnedTaskIds,
+        save,
+      });
+      setTodayPlanPreview(response?.data || null);
+
+      if (save) {
+        setTodayPlanSuccess('Today plan saved.');
+        queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+        queryClient.invalidateQueries({ queryKey: ['tasks', 'today'] });
+        await refetchTodayTasks();
+      }
+    } catch (err) {
+      setTodayPlanError(err.message || 'Failed to generate today plan');
+    } finally {
+      setTodayPlanLoading(false);
+      setTodayPlanSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -400,6 +457,7 @@ function Dashboard({ onLogout }) {
       project_id: taskData.project_id,
       title: taskData.title,
       due_date: taskData.due_date,
+      estimated_minutes: taskData.estimated_minutes,
       status: 'todo',
       priority: 'medium',
       tags: [],
@@ -468,7 +526,7 @@ function Dashboard({ onLogout }) {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">
-              {activeTab === 'today' ? 'Upcoming Tasks' : 'My Projects'}
+              {activeTab === 'today' ? "Build Today's plan" : activeTab === 'upcoming' ? 'Upcoming Tasks' : 'My Projects'}
             </h2>
             <div className="flex gap-2 mt-3">
               <button
@@ -481,13 +539,22 @@ function Dashboard({ onLogout }) {
                 Projects
               </button>
               <button
+                onClick={() => setActiveTab('upcoming')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'upcoming'
+                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
+                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                  }`}
+              >
+                Upcoming Tasks
+              </button>
+              <button
                 onClick={() => setActiveTab('today')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'today'
                   ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                   }`}
               >
-                Upcoming Tasks
+                Auto-Plan
               </button>
             </div>
           </div>
@@ -694,7 +761,7 @@ function Dashboard({ onLogout }) {
                   </div>
                 )}
               </>
-            ) : (
+            ) : activeTab === 'upcoming' ? (
               <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <h3 className="text-xl font-semibold text-[#e0e0e0]">Next 5 upcoming tasks</h3>
@@ -726,6 +793,159 @@ function Dashboard({ onLogout }) {
                     ))}
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-xl font-semibold text-[#e0e0e0]">Build Today's plan</h3>
+                  <span className="text-xs text-gray-500">Across all active projects</span>
+                </div>
+                <div className="flex flex-col md:flex-row gap-3 mb-5">
+                  <div className="w-full md:w-72">
+                    <label className="block text-xs text-gray-400 mb-1">Daily time budget (minutes)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      value={todayPlanTimeBudget}
+                      onChange={(e) => setTodayPlanTimeBudget(e.target.value)}
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      placeholder="120"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleGenerateTodayPlan({ save: false })}
+                    disabled={todayPlanLoading || todayPlanSaving}
+                    className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                  >
+                    {todayPlanLoading ? 'Generating...' : 'Generate Preview'}
+                  </button>
+                  <button
+                    onClick={() => handleGenerateTodayPlan({ save: true })}
+                    disabled={todayPlanLoading || todayPlanSaving}
+                    className="px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 hover:bg-green-500/30 transition-all disabled:opacity-50"
+                  >
+                    {todayPlanSaving ? 'Saving...' : 'Save Today Plan'}
+                  </button>
+                </div>
+
+                {todayPlanError && (
+                  <div className="mb-4 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                    {todayPlanError}
+                  </div>
+                )}
+                {todayPlanSuccess && (
+                  <div className="mb-4 px-4 py-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                    {todayPlanSuccess}
+                  </div>
+                )}
+
+                {todayPlanPreview ? (
+                  <div className="space-y-5">
+                    <div className="text-sm text-gray-400">
+                      Planned {todayPlanPreview.used_minutes} / {todayPlanPreview.time_budget_minutes} minutes
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-300 mb-2">Included</h4>
+                      <div className="space-y-2">
+                        {todayPlanPreview.included_tasks.length === 0 ? (
+                          <p className="text-sm text-gray-500">No tasks included.</p>
+                        ) : todayPlanPreview.included_tasks.map((task) => (
+                          <div key={task.id} className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                              <div>
+                                <div className="text-[#e0e0e0] font-medium">{task.title}</div>
+                                <div className="text-xs text-gray-400">
+                                  {projectNameById.get(task.project_id) || task.project_name || 'Unknown Project'} • {task.estimated_minutes || 30} min • {getPlanReasonLabel(task.reason)}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleTodayPin(task.id)}
+                                  className={`px-3 py-1 rounded text-xs border transition-all ${todayPlanPinnedTaskIds.includes(task.id)
+                                    ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
+                                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                                    }`}
+                                >
+                                  {todayPlanPinnedTaskIds.includes(task.id) ? 'Unpin' : 'Pin'}
+                                </button>
+                                <Link
+                                  to={`/project/${task.project_id}`}
+                                  state={{ openTaskId: task.id }}
+                                  className="px-3 py-1 rounded text-xs bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-all"
+                                >
+                                  Open
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-300 mb-2">Excluded</h4>
+                      <div className="space-y-2">
+                        {todayPlanPreview.excluded_tasks.length === 0 ? (
+                          <p className="text-sm text-gray-500">No excluded tasks.</p>
+                        ) : todayPlanPreview.excluded_tasks.map((task) => (
+                          <div key={task.id} className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                              <div>
+                                <div className="text-[#e0e0e0] font-medium">{task.title}</div>
+                                <div className="text-xs text-gray-400">
+                                  {projectNameById.get(task.project_id) || task.project_name || 'Unknown Project'} • {task.estimated_minutes || 30} min • {getPlanReasonLabel(task.reason)}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => toggleTodayPin(task.id)}
+                                className={`px-3 py-1 rounded text-xs border transition-all ${todayPlanPinnedTaskIds.includes(task.id)
+                                  ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
+                                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                                  }`}
+                              >
+                                {todayPlanPinnedTaskIds.includes(task.id) ? 'Unpin' : 'Pin'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">Generate a preview to see your recommended plan.</p>
+                )}
+
+                <div className="mt-6 pt-5 border-t border-white/10">
+                  <h4 className="text-sm font-semibold text-gray-300 mb-2">Saved For Today</h4>
+                  {todaySavedTasks.length === 0 ? (
+                    <p className="text-sm text-gray-500">No saved today plan yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {todaySavedTasks.map((task) => (
+                        <Link
+                          key={task.id}
+                          to={`/project/${task.project_id}`}
+                          state={{ openTaskId: task.id }}
+                          className="block p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="text-[#e0e0e0] font-medium">{task.title}</div>
+                              <div className="text-xs text-gray-400">
+                                {projectNameById.get(task.project_id) || task.project_name || 'Unknown Project'}
+                              </div>
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {task.estimated_minutes || 30} min{task.plan_pinned ? ' • pinned' : ''}
+                            </span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>

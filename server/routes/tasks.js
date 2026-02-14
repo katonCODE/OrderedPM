@@ -8,6 +8,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const aiRateLimiter = createAIRateLimiter();
 const VALID_RECURRENCE_TYPES = ['daily', 'weekly', 'monthly'];
+const DEFAULT_ESTIMATED_MINUTES = 30;
 
 const parseDateOnly = (dateString) => {
   if (!dateString || typeof dateString !== 'string') return null;
@@ -35,6 +36,48 @@ const addRecurrenceToDate = (dateString, recurrenceType, recurrenceInterval) => 
   }
 
   return formatDateOnly(date);
+};
+
+const normalizeEstimatedMinutes = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) return NaN;
+  return parsed;
+};
+
+const normalizeTimeBudget = (value) => {
+  if (value === undefined || value === null || value === '') return 120;
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1440) return NaN;
+  return parsed;
+};
+
+const getPriorityScore = (priority) => {
+  if (priority === 'high') return 300;
+  if (priority === 'medium') return 200;
+  return 100;
+};
+
+const getDateUrgencyScore = (dueDate) => {
+  if (!dueDate) return 0;
+  const due = parseDateOnly(dueDate);
+  if (!due) return 0;
+  const today = parseDateOnly(formatDateOnly(new Date()));
+  if (!today) return 0;
+  const diffDays = Math.floor((due.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays < 0) return 120;
+  if (diffDays === 0) return 100;
+  if (diffDays === 1) return 70;
+  if (diffDays <= 3) return 40;
+  if (diffDays <= 7) return 20;
+  return 0;
+};
+
+const getTaskPlanScore = (task) => {
+  const statusScore = task.status === 'in_progress' ? 30 : 0;
+  const recurrenceScore = task.recurrence_type ? 15 : 0;
+  return getPriorityScore(task.priority) + getDateUrgencyScore(task.due_date) + statusScore + recurrenceScore;
 };
 
 const getTaskDependencies = async (taskId, userId) => {
@@ -191,6 +234,138 @@ router.get('/search', authenticateToken, async (req, res) => {
     res.json({ data: result.rows });
   } catch (error) {
     console.error('Error searching tasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/today', authenticateToken, async (req, res) => {
+  try {
+    const today = formatDateOnly(new Date());
+    const result = await pool.query(
+      `SELECT t.*, p.name AS project_name
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id
+       WHERE t.user_id = $1
+         AND t.parent_task_id IS NULL
+         AND t.status != 'done'
+         AND p.archived = FALSE
+         AND t.planned_for_date = $2
+       ORDER BY t.plan_pinned DESC, COALESCE(t.position, 0) ASC, t.created_at DESC`,
+      [req.userId, today]
+    );
+
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error fetching today plan tasks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/today/plan', authenticateToken, async (req, res) => {
+  try {
+    const timeBudgetMinutes = normalizeTimeBudget(req.body?.time_budget_minutes);
+    if (Number.isNaN(timeBudgetMinutes)) {
+      return res.status(400).json({ error: 'Time budget must be an integer between 1 and 1440 minutes' });
+    }
+
+    const save = req.body?.save === true;
+    const pinnedTaskIds = Array.isArray(req.body?.pinned_task_ids)
+      ? [...new Set(req.body.pinned_task_ids.filter(id => typeof id === 'string' && id.trim() !== ''))]
+      : [];
+
+    const candidatesResult = await pool.query(
+      `SELECT t.*, p.name AS project_name
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id
+       WHERE t.user_id = $1
+         AND t.parent_task_id IS NULL
+         AND t.status != 'done'
+         AND p.archived = FALSE`,
+      [req.userId]
+    );
+
+    const candidates = candidatesResult.rows.map(task => ({
+      ...task,
+      estimated_minutes: task.estimated_minutes || DEFAULT_ESTIMATED_MINUTES,
+      score: getTaskPlanScore(task)
+    }));
+
+    const byId = new Map(candidates.map(task => [task.id, task]));
+    const pinnedTasks = pinnedTaskIds
+      .map(id => byId.get(id))
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
+    const pinnedIdSet = new Set(pinnedTasks.map(task => task.id));
+
+    const sortedCandidates = candidates
+      .filter(task => !pinnedIdSet.has(task.id))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        const aDue = a.due_date ? String(a.due_date) : '9999-12-31';
+        const bDue = b.due_date ? String(b.due_date) : '9999-12-31';
+        return aDue.localeCompare(bDue);
+      });
+
+    const included = [];
+    const excluded = [];
+    let usedMinutes = 0;
+
+    for (const task of pinnedTasks) {
+      included.push({
+        ...task,
+        reason: 'pinned'
+      });
+      usedMinutes += task.estimated_minutes;
+    }
+
+    for (const task of sortedCandidates) {
+      if (usedMinutes + task.estimated_minutes <= timeBudgetMinutes) {
+        included.push({
+          ...task,
+          reason: 'best_fit'
+        });
+        usedMinutes += task.estimated_minutes;
+      } else {
+        excluded.push({
+          ...task,
+          reason: 'over_budget'
+        });
+      }
+    }
+
+    if (save) {
+      const today = formatDateOnly(new Date());
+      await pool.query(
+        `UPDATE tasks
+         SET planned_for_date = NULL, plan_pinned = FALSE
+         WHERE user_id = $1
+           AND planned_for_date = $2`,
+        [req.userId, today]
+      );
+
+      if (included.length > 0) {
+        const includedIds = included.map(task => task.id);
+        await pool.query(
+          `UPDATE tasks
+           SET planned_for_date = $1,
+               plan_pinned = CASE WHEN id = ANY($2::uuid[]) THEN TRUE ELSE FALSE END
+           WHERE user_id = $3
+             AND id = ANY($4::uuid[])`,
+          [today, pinnedTaskIds, req.userId, includedIds]
+        );
+      }
+    }
+
+    res.json({
+      data: {
+        time_budget_minutes: timeBudgetMinutes,
+        used_minutes: usedMinutes,
+        included_tasks: included,
+        excluded_tasks: excluded
+      }
+    });
+  } catch (error) {
+    console.error('Error generating today plan:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -514,7 +689,10 @@ router.post('/', authenticateToken, async (req, res) => {
       tags,
       recurrence_type,
       recurrence_interval,
-      recurrence_end_date
+      recurrence_end_date,
+      estimated_minutes,
+      planned_for_date,
+      plan_pinned
     } = req.body;
 
     if (!project_id && !parent_task_id) {
@@ -603,11 +781,16 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     }
 
+    const validEstimatedMinutes = normalizeEstimatedMinutes(estimated_minutes);
+    if (Number.isNaN(validEstimatedMinutes)) {
+      return res.status(400).json({ error: 'Estimated minutes must be a positive integer' });
+    }
+
     const result = await pool.query(
       `INSERT INTO tasks (
         project_id, user_id, title, description, status, start_date, due_date, priority, parent_task_id, tags,
-        recurrence_type, recurrence_interval, recurrence_end_date
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+        recurrence_type, recurrence_interval, recurrence_end_date, estimated_minutes, planned_for_date, plan_pinned
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
       [
         projectId,
         req.userId,
@@ -621,7 +804,10 @@ router.post('/', authenticateToken, async (req, res) => {
         JSON.stringify(validTags),
         validRecurrenceType,
         validRecurrenceInterval,
-        validRecurrenceEndDate
+        validRecurrenceEndDate,
+        validEstimatedMinutes === undefined ? null : validEstimatedMinutes,
+        planned_for_date || null,
+        plan_pinned === true
       ]
     );
 
@@ -659,7 +845,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
       tags,
       recurrence_type,
       recurrence_interval,
-      recurrence_end_date
+      recurrence_end_date,
+      estimated_minutes,
+      planned_for_date,
+      plan_pinned
     } = req.body;
 
     // Prepare values: use provided value if present, otherwise null (COALESCE will use existing)
@@ -682,6 +871,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     let updatedRecurrenceType = null;
     let updatedRecurrenceInterval = null;
     let updatedRecurrenceEndDate = null;
+    let shouldUpdateEstimatedMinutes = false;
+    let updatedEstimatedMinutes = null;
+    let shouldUpdatePlannedForDate = false;
+    let updatedPlannedForDate = null;
+    let shouldUpdatePlanPinned = false;
+    let updatedPlanPinned = false;
 
     if (title !== undefined) {
       const trimmedTitle = title.trim();
@@ -831,6 +1026,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
 
+    if (estimated_minutes !== undefined) {
+      const parsedEstimatedMinutes = normalizeEstimatedMinutes(estimated_minutes);
+      if (Number.isNaN(parsedEstimatedMinutes)) {
+        return res.status(400).json({ error: 'Estimated minutes must be a positive integer' });
+      }
+      shouldUpdateEstimatedMinutes = true;
+      updatedEstimatedMinutes = parsedEstimatedMinutes;
+    }
+
+    if (planned_for_date !== undefined) {
+      shouldUpdatePlannedForDate = true;
+      updatedPlannedForDate = planned_for_date || null;
+    }
+
+    if (plan_pinned !== undefined) {
+      shouldUpdatePlanPinned = true;
+      updatedPlanPinned = plan_pinned === true;
+    }
+
     // Handle fractional indexing for position updates
     if (prevPosition !== undefined || nextPosition !== undefined) {
       let newPosition;
@@ -908,6 +1122,18 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (shouldUpdateRecurrenceEndDate) {
       updateFields.push(`recurrence_end_date = $${paramIndex++}`);
       updateValues.push(updatedRecurrenceEndDate);
+    }
+    if (shouldUpdateEstimatedMinutes) {
+      updateFields.push(`estimated_minutes = $${paramIndex++}`);
+      updateValues.push(updatedEstimatedMinutes);
+    }
+    if (shouldUpdatePlannedForDate) {
+      updateFields.push(`planned_for_date = $${paramIndex++}`);
+      updateValues.push(updatedPlannedForDate);
+    }
+    if (shouldUpdatePlanPinned) {
+      updateFields.push(`plan_pinned = $${paramIndex++}`);
+      updateValues.push(updatedPlanPinned);
     }
 
     updateFields.push(`updated_at = NOW()`);

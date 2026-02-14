@@ -5,6 +5,7 @@ function QuickAddTaskForm({ projects = [], onSubmit, onCancel }) {
   const [projectId, setProjectId] = useState('');
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [estimatedMinutes, setEstimatedMinutes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,9 +34,11 @@ function QuickAddTaskForm({ projects = [], onSubmit, onCancel }) {
         project_id: projectId,
         title: title.trim(),
         due_date: dueDate || null,
+        estimated_minutes: estimatedMinutes ? Math.max(1, Number(estimatedMinutes) || 1) : null,
       });
       setTitle('');
       setDueDate('');
+      setEstimatedMinutes('');
     } catch (err) {
       setError(err.message || 'Failed to create task');
     } finally {
@@ -99,6 +102,22 @@ function QuickAddTaskForm({ projects = [], onSubmit, onCancel }) {
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="quick-add-estimate" className="block text-sm font-medium text-gray-400 mb-2">
+                  Estimated Minutes
+                </label>
+                <input
+                  id="quick-add-estimate"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={estimatedMinutes}
+                  onChange={(e) => setEstimatedMinutes(e.target.value)}
+                  placeholder="e.g. 30"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
 
