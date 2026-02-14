@@ -331,6 +331,11 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                                         Due {new Date(task.due_date).toLocaleDateString()}
                                       </span>
                                     )}
+                                    {task.estimated_minutes && (
+                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        {task.estimated_minutes} min
+                                      </span>
+                                    )}
                                     {task.priority && (
                                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${task.priority === 'high'
                                         ? 'bg-red-500/20 text-red-400 border border-red-500/30'

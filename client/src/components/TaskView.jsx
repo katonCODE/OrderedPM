@@ -171,12 +171,12 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                 </div>
               </div>
 
-              {currentTask.estimated_minutes && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Estimated Effort</h3>
-                  <p className="text-[#e0e0e0]">{currentTask.estimated_minutes} minutes</p>
-                </div>
-              )}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-400 mb-2">Estimated Effort</h3>
+                <p className="text-[#e0e0e0]">
+                  {currentTask.estimated_minutes ? `${currentTask.estimated_minutes} minutes` : 'Not set'}
+                </p>
+              </div>
 
               <div>
                 <h3 className="text-sm font-semibold text-gray-400 mb-2">Dependencies</h3>

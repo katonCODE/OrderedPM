@@ -167,6 +167,7 @@ function ProjectDetail() {
         start_date: task.start_date || null,
         due_date: task.due_date || null,
         priority: task.priority || 'medium',
+        estimated_minutes: task.estimated_minutes || null,
         tags: task.tags || [],
       });
     },
@@ -225,6 +226,7 @@ function ProjectDetail() {
         start_date: task.start_date || null,
         due_date: task.due_date || null,
         priority: task.priority || 'medium',
+        estimated_minutes: task.estimated_minutes || null,
         tags: task.tags || [],
         prevPosition: prevPosition,
         nextPosition: nextPosition,

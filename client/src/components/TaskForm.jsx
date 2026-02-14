@@ -222,7 +222,7 @@ function TaskForm({ task, projectId, onSubmit, onCancel }) {
 
               <div>
                 <label htmlFor="task-estimated-minutes" className="block text-sm font-medium text-gray-400 mb-2">
-                  Estimated Minutes
+                  Estimated Minutes (optional)
                 </label>
                 <input
                   id="task-estimated-minutes"
