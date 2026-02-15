@@ -8,6 +8,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const aiRateLimiter = createAIRateLimiter();
 const VALID_RECURRENCE_TYPES = ['daily', 'weekly', 'monthly'];
+const VALID_FOCUS_OUTCOMES = ['completed', 'progress', 'blocked', 'cancelled'];
 const DEFAULT_ESTIMATED_MINUTES = 30;
 
 const parseDateOnly = (dateString) => {
@@ -50,6 +51,13 @@ const normalizeTimeBudget = (value) => {
   if (value === undefined || value === null || value === '') return 120;
   const parsed = parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 1440) return NaN;
+  return parsed;
+};
+
+const normalizeFocusMinutes = (value) => {
+  if (value === undefined || value === null || value === '') return 25;
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 240) return NaN;
   return parsed;
 };
 
@@ -366,6 +374,177 @@ router.post('/today/plan', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating today plan:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/focus/active', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT fs.*, t.title AS task_title, t.project_id
+       FROM focus_sessions fs
+       JOIN tasks t ON t.id = fs.task_id
+       WHERE fs.user_id = $1
+         AND fs.ended_at IS NULL
+       ORDER BY fs.started_at DESC
+       LIMIT 1`,
+      [req.userId]
+    );
+
+    res.json({
+      data: result.rows[0] || null
+    });
+  } catch (error) {
+    console.error('Error fetching active focus session:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/:id/focus/sessions', authenticateToken, async (req, res) => {
+  try {
+    const taskCheck = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 10), 50);
+    const result = await pool.query(
+      `SELECT *
+       FROM focus_sessions
+       WHERE task_id = $1
+         AND user_id = $2
+       ORDER BY started_at DESC
+       LIMIT $3`,
+      [req.params.id, req.userId, limit]
+    );
+
+    res.json({
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching focus sessions:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/focus/start', authenticateToken, async (req, res) => {
+  try {
+    const taskCheck = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const plannedMinutes = normalizeFocusMinutes(req.body?.planned_minutes);
+    if (Number.isNaN(plannedMinutes)) {
+      return res.status(400).json({ error: 'Planned minutes must be an integer between 1 and 240' });
+    }
+
+    const activeResult = await pool.query(
+      `SELECT fs.*, t.title AS task_title
+       FROM focus_sessions fs
+       JOIN tasks t ON t.id = fs.task_id
+       WHERE fs.user_id = $1
+         AND fs.ended_at IS NULL
+       ORDER BY fs.started_at DESC
+       LIMIT 1`,
+      [req.userId]
+    );
+
+    const activeSession = activeResult.rows[0];
+    if (activeSession) {
+      if (activeSession.task_id === req.params.id) {
+        return res.json({ data: activeSession });
+      }
+      return res.status(409).json({
+        error: `You already have an active focus session on "${activeSession.task_title}"`,
+        data: activeSession
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO focus_sessions (task_id, user_id, planned_minutes)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [req.params.id, req.userId, plannedMinutes]
+    );
+
+    res.status(201).json({
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error starting focus session:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/focus/:sessionId/end', authenticateToken, async (req, res) => {
+  try {
+    const taskCheck = await pool.query(
+      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const normalizedOutcome = req.body?.outcome
+      ? String(req.body.outcome).toLowerCase()
+      : 'progress';
+    if (!VALID_FOCUS_OUTCOMES.includes(normalizedOutcome)) {
+      return res.status(400).json({ error: 'Invalid outcome value' });
+    }
+
+    const note = req.body?.note === undefined || req.body?.note === null
+      ? null
+      : String(req.body.note).trim() || null;
+
+    const activeSessionResult = await pool.query(
+      `SELECT *
+       FROM focus_sessions
+       WHERE id = $1
+         AND task_id = $2
+         AND user_id = $3
+         AND ended_at IS NULL
+       LIMIT 1`,
+      [req.params.sessionId, req.params.id, req.userId]
+    );
+
+    if (activeSessionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Active focus session not found' });
+    }
+
+    const result = await pool.query(
+      `UPDATE focus_sessions
+       SET ended_at = NOW(),
+           actual_minutes = GREATEST(1, CEIL(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60.0)::INTEGER),
+           outcome = $1,
+           note = $2
+       WHERE id = $3
+         AND task_id = $4
+         AND user_id = $5
+         AND ended_at IS NULL
+       RETURNING *`,
+      [normalizedOutcome, note, req.params.sessionId, req.params.id, req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(409).json({ error: 'Focus session already ended' });
+    }
+
+    res.json({
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error ending focus session:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

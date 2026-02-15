@@ -305,6 +305,59 @@ export const tasksAPI = {
     }
   },
 
+  getActiveFocusSession: async () => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/focus/active`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  startFocusSession: async (taskId, { planned_minutes } = {}) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/focus/start`, {
+        method: 'POST',
+        body: JSON.stringify({ planned_minutes }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  endFocusSession: async (taskId, sessionId, { outcome = 'progress', note = '' } = {}) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/focus/${sessionId}/end`, {
+        method: 'POST',
+        body: JSON.stringify({ outcome, note }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  getFocusSessions: async (taskId, { limit = 10 } = {}) => {
+    try {
+      const params = new URLSearchParams();
+      if (limit !== undefined) params.append('limit', limit.toString());
+      const url = `${API_URL}/api/tasks/${taskId}/focus/sessions${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
   create: async (data) => {
     try {
       return await fetchWithAuth(`${API_URL}/api/tasks`, {

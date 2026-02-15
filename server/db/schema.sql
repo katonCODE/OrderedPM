@@ -55,6 +55,24 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
     PRIMARY KEY (blocked_task_id, blocker_task_id),
     CONSTRAINT check_no_self_dependency CHECK (blocked_task_id != blocker_task_id)
 );
+CREATE TABLE IF NOT EXISTS focus_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    planned_minutes INTEGER NOT NULL CHECK (planned_minutes >= 1),
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    ended_at TIMESTAMP WITH TIME ZONE,
+    actual_minutes INTEGER CHECK (
+        actual_minutes IS NULL
+        OR actual_minutes >= 0
+    ),
+    outcome TEXT CHECK (
+        outcome IS NULL
+        OR outcome IN ('completed', 'progress', 'blocked', 'cancelled')
+    ),
+    note TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
 -- Profiles table
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -78,6 +96,9 @@ CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_planned_for_date ON tasks(planned_for_date);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_blocked_task_id ON task_dependencies(blocked_task_id);
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_blocker_task_id ON task_dependencies(blocker_task_id);
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_user_id ON focus_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_task_id ON focus_sessions(task_id);
+CREATE INDEX IF NOT EXISTS idx_focus_sessions_started_at ON focus_sessions(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW();
@@ -109,6 +130,7 @@ INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE task_dependencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for projects
 -- Users can only see their own projects
@@ -167,6 +189,13 @@ CREATE POLICY "Users can delete their own task dependencies" ON task_dependencie
             AND t.user_id = auth.uid()
     )
 );
+-- RLS Policies for focus_sessions
+CREATE POLICY "Users can view their own focus sessions" ON focus_sessions FOR
+SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can create their own focus sessions" ON focus_sessions FOR
+INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own focus sessions" ON focus_sessions FOR
+UPDATE USING (auth.uid() = user_id);
 -- RLS Policies for profiles
 -- Users can view their own profile
 CREATE POLICY "Users can view their own profile" ON profiles FOR

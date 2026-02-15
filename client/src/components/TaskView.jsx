@@ -9,6 +9,13 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
   const queryClient = useQueryClient();
   const [selectedBlockerId, setSelectedBlockerId] = useState('');
   const [dependencyError, setDependencyError] = useState('');
+  const [focusDurationMinutes, setFocusDurationMinutes] = useState(task?.estimated_minutes || 25);
+  const [focusError, setFocusError] = useState('');
+  const [showEndFocusForm, setShowEndFocusForm] = useState(false);
+  const [focusOutcome, setFocusOutcome] = useState('progress');
+  const [focusNote, setFocusNote] = useState('');
+  const [markDoneOnComplete, setMarkDoneOnComplete] = useState(true);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   // Use useQuery to automatically subscribe to task updates
   const { data: currentTask } = useQuery({
@@ -30,6 +37,21 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     queryKey: ['tasks', currentTask?.project_id],
     queryFn: () => tasksAPI.getByProject(currentTask.project_id, { limit: 1000, offset: 0 }),
     enabled: !!currentTask?.project_id,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: activeFocusData } = useQuery({
+    queryKey: ['active-focus-session'],
+    queryFn: () => tasksAPI.getActiveFocusSession(),
+    enabled: !!task?.id,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15000,
+  });
+
+  const { data: focusSessionsData } = useQuery({
+    queryKey: ['task-focus-sessions', task?.id],
+    queryFn: () => tasksAPI.getFocusSessions(task.id, { limit: 5 }),
+    enabled: !!task?.id,
     refetchOnWindowFocus: false,
   });
 
@@ -60,6 +82,47 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     },
   });
 
+  const startFocusMutation = useMutation({
+    mutationFn: () => tasksAPI.startFocusSession(currentTask.id, { planned_minutes: focusDurationMinutes }),
+    onSuccess: () => {
+      setFocusError('');
+      setShowEndFocusForm(false);
+      queryClient.invalidateQueries({ queryKey: ['active-focus-session'] });
+      queryClient.invalidateQueries({ queryKey: ['task-focus-sessions', currentTask.id] });
+    },
+    onError: (error) => {
+      setFocusError(error?.message || 'Failed to start focus session');
+    },
+  });
+
+  const endFocusMutation = useMutation({
+    mutationFn: () =>
+      tasksAPI.endFocusSession(currentTask.id, activeFocusSession.id, {
+        outcome: focusOutcome,
+        note: focusNote,
+      }),
+    onSuccess: async () => {
+      setFocusError('');
+      if (focusOutcome === 'completed' && markDoneOnComplete && currentTask.status !== 'done') {
+        try {
+          await tasksAPI.update(currentTask.id, { status: 'done' });
+        } catch (error) {
+          setFocusError(error?.message || 'Session ended, but failed to mark task complete');
+        }
+      }
+      setShowEndFocusForm(false);
+      setFocusOutcome('progress');
+      setFocusNote('');
+      queryClient.invalidateQueries({ queryKey: ['active-focus-session'] });
+      queryClient.invalidateQueries({ queryKey: ['task-focus-sessions', currentTask.id] });
+      queryClient.invalidateQueries({ queryKey: ['task', currentTask.id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', currentTask.project_id] });
+    },
+    onError: (error) => {
+      setFocusError(error?.message || 'Failed to end focus session');
+    },
+  });
+
   // Update parent when task changes
   useEffect(() => {
     if (currentTask && onTaskUpdate) {
@@ -72,11 +135,34 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     setDependencyError('');
   }, [task?.id]);
 
+  useEffect(() => {
+    setFocusDurationMinutes(task?.estimated_minutes || 25);
+    setFocusError('');
+    setShowEndFocusForm(false);
+    setFocusOutcome('progress');
+    setFocusNote('');
+    setMarkDoneOnComplete(true);
+  }, [task?.id, task?.estimated_minutes]);
+
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timerId);
+  }, []);
+
   if (!currentTask) return null;
 
   const blockedBy = dependencies?.blocked_by || [];
   const blocking = dependencies?.blocking || [];
   const projectTasks = projectTasksData?.data || projectTasksData || [];
+  const activeFocusSession = activeFocusData?.data ?? null;
+  const focusSessions = focusSessionsData?.data ?? [];
+  const isActiveFocusOnCurrentTask = !!activeFocusSession && activeFocusSession.task_id === currentTask.id && !activeFocusSession.ended_at;
+  const activeFocusOnAnotherTask = !!activeFocusSession && activeFocusSession.task_id !== currentTask.id && !activeFocusSession.ended_at;
+  const startedAtMs = isActiveFocusOnCurrentTask ? new Date(activeFocusSession.started_at).getTime() : null;
+  const targetEndMs = startedAtMs ? startedAtMs + (activeFocusSession.planned_minutes * 60 * 1000) : null;
+  const remainingSeconds = targetEndMs ? Math.max(0, Math.ceil((targetEndMs - nowMs) / 1000)) : 0;
 
   const availableBlockers = useMemo(() => {
     const existingBlockerIds = new Set(blockedBy.map(dep => dep.id));
@@ -99,6 +185,12 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
       month: 'long',
       day: 'numeric',
     });
+  };
+
+  const formatTimer = (totalSeconds) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
   const getStatusColor = (status) => {
@@ -176,6 +268,121 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                 <p className="text-[#e0e0e0]">
                   {currentTask.estimated_minutes ? `${currentTask.estimated_minutes} minutes` : 'Not set'}
                 </p>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-400 mb-2">Focus Session</h3>
+                {focusError && (
+                  <p className="text-xs text-red-400 mb-3">{focusError}</p>
+                )}
+                {activeFocusOnAnotherTask && (
+                  <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-300">
+                    You already have an active focus session on another task.
+                  </div>
+                )}
+                {isActiveFocusOnCurrentTask ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                      <p className="text-xs text-gray-400 mb-1">Time Remaining</p>
+                      <p className="text-2xl font-bold text-blue-300">{formatTimer(remainingSeconds)}</p>
+                      {remainingSeconds === 0 && (
+                        <p className="text-xs text-yellow-300 mt-1">Session timer finished. End session to log outcome.</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowEndFocusForm(!showEndFocusForm)}
+                      className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all"
+                    >
+                      {showEndFocusForm ? 'Cancel End Session' : 'End Session'}
+                    </button>
+                    {showEndFocusForm && (
+                      <div className="space-y-3 p-3 bg-white/5 border border-white/10 rounded-lg">
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Outcome</label>
+                          <select
+                            value={focusOutcome}
+                            onChange={(e) => setFocusOutcome(e.target.value)}
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            <option value="completed">Completed</option>
+                            <option value="progress">Made progress</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Notes (optional)</label>
+                          <textarea
+                            value={focusNote}
+                            onChange={(e) => setFocusNote(e.target.value)}
+                            rows={2}
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
+                            placeholder="Quick session notes"
+                          />
+                        </div>
+                        {focusOutcome === 'completed' && (
+                          <label className="flex items-center gap-2 text-sm text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={markDoneOnComplete}
+                              onChange={(e) => setMarkDoneOnComplete(e.target.checked)}
+                              className="rounded border-white/20 bg-white/5"
+                            />
+                            Mark task as done
+                          </label>
+                        )}
+                        <button
+                          onClick={() => endFocusMutation.mutate()}
+                          disabled={endFocusMutation.isPending}
+                          className="px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-sm text-green-300 hover:bg-green-500/30 transition-all disabled:opacity-50"
+                        >
+                          {endFocusMutation.isPending ? 'Ending...' : 'Save Session'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-end gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Duration (minutes)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={240}
+                          value={focusDurationMinutes}
+                          onChange={(e) => setFocusDurationMinutes(e.target.value)}
+                          className="w-28 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        />
+                      </div>
+                      <button
+                        onClick={() => startFocusMutation.mutate()}
+                        disabled={startFocusMutation.isPending || activeFocusOnAnotherTask}
+                        className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                      >
+                        {startFocusMutation.isPending ? 'Starting...' : 'Start Focus'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">Pick one task, start a timer, and log outcome when done.</p>
+                  </div>
+                )}
+                {focusSessions.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-400 mb-2">Recent Sessions</p>
+                    <div className="space-y-2">
+                      {focusSessions.slice(0, 3).map((session) => (
+                        <div key={session.id} className="p-2 bg-white/5 border border-white/10 rounded-lg text-xs text-gray-300 flex justify-between items-center gap-2">
+                          <span>
+                            {new Date(session.started_at).toLocaleString()}
+                          </span>
+                          <span>
+                            {session.actual_minutes || session.planned_minutes} min - {session.outcome || 'in progress'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
