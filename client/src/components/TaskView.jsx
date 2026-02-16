@@ -151,6 +151,16 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     return () => clearInterval(timerId);
   }, []);
 
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   if (!currentTask) return null;
 
   const blockedBy = dependencies?.blocked_by || [];

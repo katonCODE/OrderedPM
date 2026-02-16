@@ -12,6 +12,8 @@ import TaskCreationModal from './TaskCreationModal';
 import AITaskForm from './AITaskForm';
 import TaskView from './TaskView';
 import GlobalTaskSearch from './GlobalTaskSearch';
+import { ProjectDetailSkeleton } from './SkeletonLoader';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import './ProjectDetail.css';
 
 function ProjectDetail() {
@@ -32,6 +34,7 @@ function ProjectDetail() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [actionError, setActionError] = useState('');
   const exportMenuRef = useRef(null);
+  const globalSearchRef = useRef(null);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', id],
@@ -356,15 +359,42 @@ function ProjectDetail() {
     setViewingTask(null);
   };
 
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    'c': () => {
+      if (!showForm && !showAITaskForm && !showCreationModal && !viewingTask) {
+        setShowCreationModal(true);
+      }
+    },
+    '/': (e) => {
+      e.preventDefault();
+      if (globalSearchRef.current?.focus) {
+        globalSearchRef.current.focus();
+      }
+    },
+    'Escape': () => {
+      if (viewingTask) {
+        handleViewTaskClose();
+      }
+      if (showForm) {
+        setShowForm(false);
+        setEditingTask(null);
+      }
+      if (showAITaskForm) {
+        setShowAITaskForm(false);
+      }
+      if (showCreationModal) {
+        setShowCreationModal(false);
+      }
+    },
+  }, [showForm, showAITaskForm, showCreationModal, viewingTask]);
+
   if (loading && !project) {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] flex flex-col items-center justify-center text-[#e0e0e0]">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse opacity-40"></div>
-          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse opacity-40" style={{ animationDelay: '0.2s' }}></div>
-          <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse opacity-40" style={{ animationDelay: '0.4s' }}></div>
+      <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
+          <ProjectDetailSkeleton />
         </div>
-        <p className="text-gray-400">Loading project...</p>
       </div>
     );
   }
@@ -401,7 +431,7 @@ function ProjectDetail() {
             ← Back to Projects
           </button>
           <div className="mb-4 w-full max-w-md">
-            <GlobalTaskSearch />
+            <GlobalTaskSearch ref={globalSearchRef} />
           </div>
           <div className="flex justify-between items-start gap-4">
             <div className="flex-1">

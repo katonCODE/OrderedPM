@@ -1,5 +1,5 @@
 // client/src/components/Dashboard.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
@@ -12,6 +12,8 @@ import ConfirmDialog from './ConfirmDialog';
 import Pagination from './Pagination';
 import GlobalTaskSearch from './GlobalTaskSearch';
 import QuickAddTaskForm from './QuickAddTaskForm';
+import { ProjectCardSkeleton, StatsSkeleton } from './SkeletonLoader';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -39,6 +41,8 @@ function Dashboard({ onLogout }) {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
+  const searchInputRef = useRef(null);
+  const globalSearchRef = useRef(null);
   const itemsPerPage = 15;
 
   const { data: profile } = useQuery({
@@ -365,6 +369,29 @@ function Dashboard({ onLogout }) {
     }
   };
 
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    'c': () => {
+      if (!showForm && !showQuickAddForm) {
+        setShowQuickAddForm(true);
+      }
+    },
+    '/': (e) => {
+      e.preventDefault();
+      if (globalSearchRef.current?.focus) {
+        globalSearchRef.current.focus();
+      }
+    },
+    'Escape': () => {
+      if (showForm) {
+        handleFormClose();
+      }
+      if (showQuickAddForm) {
+        setShowQuickAddForm(false);
+      }
+    },
+  }, [showForm, showQuickAddForm]);
+
   const handleImportFile = async (file) => {
     setImporting(true);
     setImportError('');
@@ -485,7 +512,7 @@ function Dashboard({ onLogout }) {
               </span>
             </h1>
             <div className="hidden sm:block flex-1 max-w-md mx-4 relative z-[120]">
-              <GlobalTaskSearch />
+              <GlobalTaskSearch ref={globalSearchRef} />
             </div>
             <div className="flex items-center gap-4">
               {profile && (
@@ -643,8 +670,33 @@ function Dashboard({ onLogout }) {
           </div>
         )}
 
+        {showQuickAddForm && (
+          <div className="mb-8">
+            <QuickAddTaskForm
+              projects={activeProjectsForQuickAdd}
+              onSubmit={async (taskData) => {
+                try {
+                  await tasksAPI.create(taskData);
+                  queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+                  setShowQuickAddForm(false);
+                } catch (err) {
+                  throw err;
+                }
+              }}
+              onCancel={() => setShowQuickAddForm(false)}
+            />
+          </div>
+        )}
+
         {initialLoading && !projectsData ? (
-          <div className="text-center py-20 text-gray-400 text-lg">Loading projects...</div>
+          <div className="space-y-8">
+            <StatsSkeleton />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <ProjectCardSkeleton key={i} />
+              ))}
+            </div>
+          </div>
         ) : (
           <>
             {isFetching && projectsData && (

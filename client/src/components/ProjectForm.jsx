@@ -14,6 +14,16 @@ function ProjectForm({ project, onSubmit, onCancel }) {
     }
   }, [project]);
 
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && !loading) {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onCancel, loading]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');

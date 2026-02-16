@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tasksAPI } from '../services/api';
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
 
-function GlobalTaskSearch() {
+const GlobalTaskSearch = forwardRef(function GlobalTaskSearch(props, ref) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -13,6 +13,13 @@ function GlobalTaskSearch() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      inputRef.current?.focus();
+    },
+  }));
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), DEBOUNCE_MS);
@@ -76,6 +83,7 @@ function GlobalTaskSearch() {
   return (
     <div className="relative w-full max-w-md z-[120]" ref={containerRef}>
       <input
+        ref={inputRef}
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -121,6 +129,6 @@ function GlobalTaskSearch() {
       )}
     </div>
   );
-}
+});
 
 export default GlobalTaskSearch;

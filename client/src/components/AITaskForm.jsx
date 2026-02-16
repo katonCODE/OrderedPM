@@ -1,5 +1,5 @@
 // client/src/components/AITaskForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { tasksAPI } from '../services/api';
 import './TaskForm.css';
@@ -15,6 +15,16 @@ function AITaskForm({ projectId, onSubmit, onCancel }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [isGenerated, setIsGenerated] = useState(false);
+
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && !isGenerating && !isSubmitting) {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onCancel, isGenerating, isSubmitting]);
 
   const handleGenerate = async (e) => {
     e.preventDefault();
