@@ -33,6 +33,9 @@ function ProjectDetail() {
   const [sortByPriority, setSortByPriority] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [shareUsername, setShareUsername] = useState('');
+  const [shareError, setShareError] = useState('');
+  const [shareSuccess, setShareSuccess] = useState('');
   const exportMenuRef = useRef(null);
   const globalSearchRef = useRef(null);
 
@@ -45,10 +48,17 @@ function ProjectDetail() {
     queryKey: ['tasks', id],
     queryFn: () => tasksAPI.getByProject(id, { limit: 1000, offset: 0 }), // Large limit for Kanban view
   });
+  const { data: sharesData, isLoading: sharesLoading } = useQuery({
+    queryKey: ['projectShares', id],
+    queryFn: () => projectsAPI.getShares(id),
+    enabled: Boolean(project),
+  });
 
   // Handle both old format (array) and new format (object with data and pagination)
   // For KanbanBoard, we need all tasks, so we use a large limit
   const tasks = tasksData?.data || tasksData || [];
+  const shares = sharesData?.data || [];
+  const isOwner = project?.is_owner !== false;
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
@@ -296,6 +306,35 @@ function ProjectDetail() {
     },
   });
 
+  const addShareMutation = useMutation({
+    mutationFn: (username) => projectsAPI.shareWithUsername(id, username),
+    onSuccess: () => {
+      setShareUsername('');
+      setShareError('');
+      setShareSuccess('Project shared successfully.');
+      queryClient.invalidateQueries({ queryKey: ['projectShares', id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to share project');
+    },
+  });
+
+  const removeShareMutation = useMutation({
+    mutationFn: (sharedUserId) => projectsAPI.removeShare(id, sharedUserId),
+    onSuccess: () => {
+      setShareError('');
+      setShareSuccess('Share removed.');
+      queryClient.invalidateQueries({ queryKey: ['projectShares', id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to remove share');
+    },
+  });
+
   const handleStatusChange = (taskId, newStatus) => {
     setActionError('');
     const task = tasks.find(t => t.id === taskId);
@@ -357,6 +396,16 @@ function ProjectDetail() {
 
   const handleViewTaskClose = () => {
     setViewingTask(null);
+  };
+
+  const handleShareProject = () => {
+    const identifier = shareUsername.trim();
+    if (!identifier) {
+      setShareSuccess('');
+      setShareError('Enter a username or email to share with');
+      return;
+    }
+    addShareMutation.mutate(identifier);
   };
 
   // Keyboard shortcuts
@@ -446,12 +495,70 @@ function ProjectDetail() {
                     Archived
                   </span>
                 )}
+                {!isOwner && (
+                  <span className="px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-lg text-xs text-blue-300 font-medium">
+                    Shared with you
+                  </span>
+                )}
               </div>
               {project.description && (
                 <p className="text-gray-400 text-base md:text-lg leading-relaxed">
                   {project.description}
                 </p>
               )}
+              <div className="mt-4 max-w-xl rounded-lg border border-white/10 bg-white/5 p-3">
+                {isOwner ? (
+                  <>
+                    <p className="text-xs text-gray-400 mb-2">Share with username or email</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={shareUsername}
+                        onChange={(e) => {
+                          setShareUsername(e.target.value);
+                          setShareError('');
+                          setShareSuccess('');
+                        }}
+                        placeholder="username or email"
+                        className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                      <button
+                        onClick={handleShareProject}
+                        disabled={addShareMutation.isPending}
+                        className="px-3 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                      >
+                        {addShareMutation.isPending ? 'Sharing...' : 'Share'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-400">You can edit tasks in this shared project.</p>
+                )}
+                {shareError && <p className="text-xs text-red-400 mt-2">{shareError}</p>}
+                {shareSuccess && <p className="text-xs text-green-400 mt-2">{shareSuccess}</p>}
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs text-gray-400">Collaborators ({shares.length})</p>
+                  {sharesLoading ? (
+                    <p className="text-xs text-gray-500">Loading...</p>
+                  ) : shares.length === 0 ? (
+                    <p className="text-xs text-gray-500">No collaborators yet.</p>
+                  ) : (
+                    shares.map((share) => (
+                      <div key={share.user_id} className="flex items-center justify-between text-xs text-gray-300">
+                        <span>{share.full_name || share.username}</span>
+                        {isOwner && (
+                          <button
+                            onClick={() => removeShareMutation.mutate(share.user_id)}
+                            disabled={removeShareMutation.isPending}
+                            className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
             {project && (
               <div className="relative z-[100]" ref={exportMenuRef} style={{ position: 'relative' }}>

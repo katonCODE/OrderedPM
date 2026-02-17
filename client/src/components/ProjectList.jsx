@@ -34,13 +34,14 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
       {projects.map((project) => {
         const stats = getProjectStats(project.id);
         const lastUpdated = project.updated_at || project.created_at;
+        const isOwner = project.is_owner !== false;
 
         return (
           <div
             key={project.id}
             className={`relative backdrop-blur-xl bg-white/5 border rounded-xl p-6 hover:bg-white/10 transition-all group ${project.archived
-                ? 'border-gray-600/30 opacity-75'
-                : 'border-white/10'
+              ? 'border-gray-600/30 opacity-75'
+              : 'border-white/10'
               }`}
           >
             {project.archived && (
@@ -51,6 +52,11 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
             {!project.archived && stats.overdueTasks > 0 && (
               <div className="absolute top-3 right-3 px-2 py-1 bg-red-500/20 border border-red-500/30 rounded text-xs text-red-400 font-medium">
                 {stats.overdueTasks} overdue
+              </div>
+            )}
+            {!isOwner && (
+              <div className="absolute top-3 left-3 px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium">
+                Shared
               </div>
             )}
 
@@ -71,7 +77,7 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
                   </Link>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
-                  {!project.archived && (
+                  {!project.archived && isOwner && (
                     <>
                       <button
                         onClick={() => onEdit(project)}
@@ -98,7 +104,7 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
                       </button>
                     </>
                   )}
-                  {project.archived && onRestore && (
+                  {project.archived && onRestore && isOwner && (
                     <>
                       <button
                         onClick={() => onRestore(project.id)}

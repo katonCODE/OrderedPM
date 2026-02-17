@@ -88,12 +88,48 @@ const getTaskPlanScore = (task) => {
   return getPriorityScore(task.priority) + getDateUrgencyScore(task.due_date) + statusScore + recurrenceScore;
 };
 
+const hasProjectAccess = async (projectId, userId) => {
+  const result = await pool.query(
+    `SELECT 1
+     FROM projects p
+     LEFT JOIN project_shares ps
+       ON ps.project_id = p.id
+      AND ps.shared_with_user_id = $2
+     WHERE p.id = $1
+       AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
+     LIMIT 1`,
+    [projectId, userId]
+  );
+  return result.rows.length > 0;
+};
+
+const getAccessibleTask = async (taskId, userId) => {
+  const result = await pool.query(
+    `SELECT t.*
+     FROM tasks t
+     JOIN projects p ON p.id = t.project_id
+     LEFT JOIN project_shares ps
+       ON ps.project_id = p.id
+      AND ps.shared_with_user_id = $2
+     WHERE t.id = $1
+       AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
+     LIMIT 1`,
+    [taskId, userId]
+  );
+  return result.rows[0] || null;
+};
+
 const getTaskDependencies = async (taskId, userId) => {
   const blockedByResult = await pool.query(
     `SELECT t.id, t.title, t.status
      FROM task_dependencies td
      JOIN tasks t ON t.id = td.blocker_task_id
-     WHERE td.blocked_task_id = $1 AND t.user_id = $2
+     JOIN projects p ON p.id = t.project_id
+     LEFT JOIN project_shares ps
+       ON ps.project_id = p.id
+      AND ps.shared_with_user_id = $2
+     WHERE td.blocked_task_id = $1
+       AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
      ORDER BY t.created_at ASC`,
     [taskId, userId]
   );
@@ -102,7 +138,12 @@ const getTaskDependencies = async (taskId, userId) => {
     `SELECT t.id, t.title, t.status
      FROM task_dependencies td
      JOIN tasks t ON t.id = td.blocked_task_id
-     WHERE td.blocker_task_id = $1 AND t.user_id = $2
+     JOIN projects p ON p.id = t.project_id
+     LEFT JOIN project_shares ps
+       ON ps.project_id = p.id
+      AND ps.shared_with_user_id = $2
+     WHERE td.blocker_task_id = $1
+       AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
      ORDER BY t.created_at ASC`,
     [taskId, userId]
   );
@@ -117,7 +158,13 @@ const getTaskDependencies = async (taskId, userId) => {
 router.get('/user/all', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM tasks WHERE user_id = $1',
+      `SELECT t.*
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id
+       LEFT JOIN project_shares ps
+         ON ps.project_id = p.id
+        AND ps.shared_with_user_id = $1
+       WHERE p.user_id = $1 OR ps.shared_with_user_id IS NOT NULL`,
       [req.userId]
     );
 
@@ -133,13 +180,8 @@ router.get('/user/all', authenticateToken, async (req, res) => {
 // Get all tasks for a project
 router.get('/project/:projectId', authenticateToken, async (req, res) => {
   try {
-    // First verify the project belongs to the user
-    const projectCheck = await pool.query(
-      'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
-      [req.params.projectId, req.userId]
-    );
-
-    if (projectCheck.rows.length === 0) {
+    const canAccessProject = await hasProjectAccess(req.params.projectId, req.userId);
+    if (!canAccessProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
@@ -152,8 +194,8 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
 
     // Get total count for pagination metadata (only top-level tasks)
     const countResult = await pool.query(
-      'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND user_id = $2 AND parent_task_id IS NULL',
-      [req.params.projectId, req.userId]
+      'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND parent_task_id IS NULL',
+      [req.params.projectId]
     );
     const total = parseInt(countResult.rows[0].count);
 
@@ -174,12 +216,12 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
         COUNT(st.id) FILTER (WHERE st.status = 'done') as completed_subtasks,
         COUNT(st.id) as total_subtasks
       FROM tasks t
-      LEFT JOIN tasks st ON st.parent_task_id = t.id AND st.user_id = t.user_id
-      WHERE t.project_id = $1 AND t.user_id = $2 AND t.parent_task_id IS NULL
+      LEFT JOIN tasks st ON st.parent_task_id = t.id
+      WHERE t.project_id = $1 AND t.parent_task_id IS NULL
       GROUP BY t.id
       ORDER BY COALESCE(t.position, 0) ASC, t.created_at DESC
-      LIMIT $3 OFFSET $4`,
-      [req.params.projectId, req.userId, validLimit, validOffset]
+      LIMIT $2 OFFSET $3`,
+      [req.params.projectId, validLimit, validOffset]
     );
 
     // Get all subtasks for the returned tasks
@@ -187,8 +229,8 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
     let subtasks = [];
     if (parentTaskIds.length > 0) {
       const subtasksResult = await pool.query(
-        'SELECT * FROM tasks WHERE parent_task_id = ANY($1) AND user_id = $2 ORDER BY created_at ASC',
-        [parentTaskIds, req.userId]
+        'SELECT * FROM tasks WHERE parent_task_id = ANY($1) ORDER BY created_at ASC',
+        [parentTaskIds]
       );
       subtasks = subtasksResult.rows;
     }
@@ -232,8 +274,12 @@ router.get('/search', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT t.id, t.project_id, t.title, t.status, t.due_date, t.priority, p.name AS project_name
        FROM tasks t
-       JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id
-       WHERE t.user_id = $1 AND t.parent_task_id IS NULL
+       JOIN projects p ON p.id = t.project_id
+       LEFT JOIN project_shares ps
+         ON ps.project_id = p.id
+        AND ps.shared_with_user_id = $1
+       WHERE (p.user_id = $1 OR ps.shared_with_user_id IS NOT NULL)
+         AND t.parent_task_id IS NULL
          AND (t.title ILIKE $2 OR t.description ILIKE $2)
        ORDER BY t.updated_at DESC
        LIMIT $3`,
@@ -253,7 +299,10 @@ router.get('/today', authenticateToken, async (req, res) => {
       `SELECT t.*, p.name AS project_name
        FROM tasks t
        JOIN projects p ON p.id = t.project_id
-       WHERE t.user_id = $1
+       LEFT JOIN project_shares ps
+         ON ps.project_id = p.id
+        AND ps.shared_with_user_id = $1
+       WHERE (p.user_id = $1 OR ps.shared_with_user_id IS NOT NULL)
          AND t.parent_task_id IS NULL
          AND t.status != 'done'
          AND p.archived = FALSE
@@ -285,7 +334,10 @@ router.post('/today/plan', authenticateToken, async (req, res) => {
       `SELECT t.*, p.name AS project_name
        FROM tasks t
        JOIN projects p ON p.id = t.project_id
-       WHERE t.user_id = $1
+       LEFT JOIN project_shares ps
+         ON ps.project_id = p.id
+        AND ps.shared_with_user_id = $1
+       WHERE (p.user_id = $1 OR ps.shared_with_user_id IS NOT NULL)
          AND t.parent_task_id IS NULL
          AND t.status != 'done'
          AND p.archived = FALSE`,
@@ -346,8 +398,15 @@ router.post('/today/plan', authenticateToken, async (req, res) => {
       await pool.query(
         `UPDATE tasks
          SET planned_for_date = NULL, plan_pinned = FALSE
-         WHERE user_id = $1
-           AND planned_for_date = $2`,
+         WHERE planned_for_date = $2
+           AND project_id IN (
+             SELECT p.id
+             FROM projects p
+             LEFT JOIN project_shares ps
+               ON ps.project_id = p.id
+              AND ps.shared_with_user_id = $1
+             WHERE p.user_id = $1 OR ps.shared_with_user_id IS NOT NULL
+           )`,
         [req.userId, today]
       );
 
@@ -357,8 +416,15 @@ router.post('/today/plan', authenticateToken, async (req, res) => {
           `UPDATE tasks
            SET planned_for_date = $1,
                plan_pinned = CASE WHEN id = ANY($2::uuid[]) THEN TRUE ELSE FALSE END
-           WHERE user_id = $3
-             AND id = ANY($4::uuid[])`,
+           WHERE id = ANY($4::uuid[])
+             AND project_id IN (
+               SELECT p.id
+               FROM projects p
+               LEFT JOIN project_shares ps
+                 ON ps.project_id = p.id
+                AND ps.shared_with_user_id = $3
+               WHERE p.user_id = $3 OR ps.shared_with_user_id IS NOT NULL
+             )`,
           [today, pinnedTaskIds, req.userId, includedIds]
         );
       }
@@ -402,12 +468,8 @@ router.get('/focus/active', authenticateToken, async (req, res) => {
 
 router.get('/:id/focus/sessions', authenticateToken, async (req, res) => {
   try {
-    const taskCheck = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    if (taskCheck.rows.length === 0) {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
@@ -433,12 +495,8 @@ router.get('/:id/focus/sessions', authenticateToken, async (req, res) => {
 
 router.post('/:id/focus/start', authenticateToken, async (req, res) => {
   try {
-    const taskCheck = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    if (taskCheck.rows.length === 0) {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
@@ -487,12 +545,8 @@ router.post('/:id/focus/start', authenticateToken, async (req, res) => {
 
 router.post('/:id/focus/:sessionId/end', authenticateToken, async (req, res) => {
   try {
-    const taskCheck = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    if (taskCheck.rows.length === 0) {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
@@ -568,8 +622,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
         COUNT(st.id) FILTER (WHERE st.status = 'done') as completed_subtasks,
         COUNT(st.id) as total_subtasks
       FROM tasks t
-      LEFT JOIN tasks st ON st.parent_task_id = t.id AND st.user_id = t.user_id
-      WHERE t.id = $1 AND t.user_id = $2
+      LEFT JOIN tasks st ON st.parent_task_id = t.id
+      JOIN projects p ON p.id = t.project_id
+      LEFT JOIN project_shares ps
+        ON ps.project_id = p.id
+       AND ps.shared_with_user_id = $2
+      WHERE t.id = $1
+        AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
       GROUP BY t.id`,
       [req.params.id, req.userId]
     );
@@ -582,8 +641,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     // Get subtasks
     const subtasksResult = await pool.query(
-      'SELECT * FROM tasks WHERE parent_task_id = $1 AND user_id = $2 ORDER BY created_at ASC',
-      [req.params.id, req.userId]
+      'SELECT * FROM tasks WHERE parent_task_id = $1 ORDER BY created_at ASC',
+      [req.params.id]
     );
 
     res.json({
@@ -603,19 +662,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Get subtasks for a task
 router.get('/:id/subtasks', authenticateToken, async (req, res) => {
   try {
-    // Verify parent task exists and belongs to user
-    const parentTask = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    if (parentTask.rows.length === 0) {
+    const parentTask = await getAccessibleTask(req.params.id, req.userId);
+    if (!parentTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
     const result = await pool.query(
-      'SELECT * FROM tasks WHERE parent_task_id = $1 AND user_id = $2 ORDER BY created_at ASC',
-      [req.params.id, req.userId]
+      'SELECT * FROM tasks WHERE parent_task_id = $1 ORDER BY created_at ASC',
+      [req.params.id]
     );
 
     res.json({
@@ -629,12 +683,8 @@ router.get('/:id/subtasks', authenticateToken, async (req, res) => {
 
 router.get('/:id/dependencies', authenticateToken, async (req, res) => {
   try {
-    const taskCheck = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    if (taskCheck.rows.length === 0) {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
@@ -658,24 +708,18 @@ router.post('/:id/dependencies', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'A task cannot depend on itself' });
     }
 
-    const taskResult = await pool.query(
-      'SELECT id, project_id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-    if (taskResult.rows.length === 0) {
+    const taskRow = await getAccessibleTask(req.params.id, req.userId);
+    if (!taskRow) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const blockerResult = await pool.query(
-      'SELECT id, project_id FROM tasks WHERE id = $1 AND user_id = $2',
-      [blocker_task_id, req.userId]
-    );
-    if (blockerResult.rows.length === 0) {
+    const blockerRow = await getAccessibleTask(blocker_task_id, req.userId);
+    if (!blockerRow) {
       return res.status(404).json({ error: 'Blocker task not found' });
     }
 
-    const taskProjectId = taskResult.rows[0].project_id;
-    const blockerProjectId = blockerResult.rows[0].project_id;
+    const taskProjectId = taskRow.project_id;
+    const blockerProjectId = blockerRow.project_id;
 
     if (taskProjectId !== blockerProjectId) {
       return res.status(400).json({ error: 'Dependencies must be within the same project' });
@@ -719,19 +763,13 @@ router.post('/:id/dependencies', authenticateToken, async (req, res) => {
 
 router.delete('/:id/dependencies/:blockerId', authenticateToken, async (req, res) => {
   try {
-    const taskCheck = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-    if (taskCheck.rows.length === 0) {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const blockerCheck = await pool.query(
-      'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.blockerId, req.userId]
-    );
-    if (blockerCheck.rows.length === 0) {
+    const blocker = await getAccessibleTask(req.params.blockerId, req.userId);
+    if (!blocker) {
       return res.status(404).json({ error: 'Blocker task not found' });
     }
 
@@ -760,12 +798,8 @@ router.post('/ai/generate', authenticateToken, aiRateLimiter, async (req, res) =
 
     // Optionally validate project_id if provided
     if (project_id) {
-      const projectCheck = await pool.query(
-        'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
-        [project_id, req.userId]
-      );
-
-      if (projectCheck.rows.length === 0) {
+      const canAccessProject = await hasProjectAccess(project_id, req.userId);
+      if (!canAccessProject) {
         return res.status(404).json({ error: 'Project not found' });
       }
     }
@@ -887,27 +921,18 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // If parent_task_id is provided, verify it exists and get its project_id
     if (parent_task_id) {
-      const parentTask = await pool.query(
-        'SELECT project_id FROM tasks WHERE id = $1 AND user_id = $2',
-        [parent_task_id, req.userId]
-      );
-
-      if (parentTask.rows.length === 0) {
+      const parentTask = await getAccessibleTask(parent_task_id, req.userId);
+      if (!parentTask) {
         return res.status(404).json({ error: 'Parent task not found' });
       }
 
-      projectId = parentTask.rows[0].project_id;
+      projectId = parentTask.project_id;
       // Ensure parent_task_id is set
       parentTaskId = parent_task_id;
     }
 
-    // Verify the project belongs to the user
-    const projectCheck = await pool.query(
-      'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
-      [projectId, req.userId]
-    );
-
-    if (projectCheck.rows.length === 0) {
+    const canAccessProject = await hasProjectAccess(projectId, req.userId);
+    if (!canAccessProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
@@ -941,7 +966,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
       validRecurrenceEndDate = recurrence_end_date || null;
     } else if (
-      recurrence_interval !== undefined ||
+      (recurrence_interval !== undefined && recurrence_interval !== null && recurrence_interval !== '') ||
       (recurrence_end_date !== undefined && recurrence_end_date !== null && recurrence_end_date !== '')
     ) {
       return res.status(400).json({ error: 'Recurrence type is required when recurrence interval or end date is set' });
@@ -1002,14 +1027,11 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     // Verify task exists and belongs to user
-    const existingTask = await pool.query(
-      'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    if (existingTask.rows.length === 0) {
+    const existingTaskRow = await getAccessibleTask(req.params.id, req.userId);
+    if (!existingTaskRow) {
       return res.status(404).json({ error: 'Task not found' });
     }
+    const existingTask = { rows: [existingTaskRow] };
 
     const {
       title,
@@ -1078,10 +1100,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
              FROM task_dependencies td
              JOIN tasks t ON t.id = td.blocker_task_id
              WHERE td.blocked_task_id = $1
-               AND t.user_id = $2
                AND t.status != 'done'
              ORDER BY t.created_at ASC`,
-            [req.params.id, req.userId]
+            [req.params.id]
           );
 
           if (blockersResult.rows.length > 0) {
@@ -1124,7 +1145,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
       } else {
         // Verify parent task exists and belongs to user
         const parentCheck = await pool.query(
-          'SELECT id FROM tasks WHERE id = $1 AND user_id = $2',
+          `SELECT t.id
+           FROM tasks t
+           JOIN projects p ON p.id = t.project_id
+           LEFT JOIN project_shares ps
+             ON ps.project_id = p.id
+            AND ps.shared_with_user_id = $2
+           WHERE t.id = $1
+             AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
+           LIMIT 1`,
           [parent_task_id, req.userId]
         );
 
@@ -1324,7 +1353,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
     queryText = `
       UPDATE tasks 
       SET ${updateFields.join(', ')}
-      WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}
+      WHERE id = $${paramIndex++}
+        AND project_id IN (
+          SELECT p.id
+          FROM projects p
+          LEFT JOIN project_shares ps
+            ON ps.project_id = p.id
+           AND ps.shared_with_user_id = $${paramIndex}
+          WHERE p.user_id = $${paramIndex}
+             OR ps.shared_with_user_id IS NOT NULL
+        )
       RETURNING *
     `;
 
@@ -1372,7 +1410,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
         );
 
         await pool.query(
-          'UPDATE tasks SET last_generated_at = NOW() WHERE id = $1 AND user_id = $2',
+          `UPDATE tasks
+           SET last_generated_at = NOW()
+           WHERE id = $1
+             AND project_id IN (
+               SELECT p.id
+               FROM projects p
+               LEFT JOIN project_shares ps
+                 ON ps.project_id = p.id
+                AND ps.shared_with_user_id = $2
+               WHERE p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL
+             )`,
           [updatedTask.id, req.userId]
         );
       }
@@ -1396,7 +1444,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM tasks WHERE id = $1 AND user_id = $2 RETURNING *',
+      `DELETE FROM tasks
+       WHERE id = $1
+         AND project_id IN (
+           SELECT p.id
+           FROM projects p
+           LEFT JOIN project_shares ps
+             ON ps.project_id = p.id
+            AND ps.shared_with_user_id = $2
+           WHERE p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL
+         )
+       RETURNING *`,
       [req.params.id, req.userId]
     );
 

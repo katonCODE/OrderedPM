@@ -222,6 +222,46 @@ export const projectsAPI = {
       throw error;
     }
   },
+
+  getShares: async (id) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/shares`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  shareWithUsername: async (id, identifier) => {
+    try {
+      const isEmail = identifier.includes('@');
+      const body = isEmail ? { email: identifier } : { username: identifier };
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/shares`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  removeShare: async (id, sharedUserId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/shares/${sharedUserId}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 
 // Tasks API

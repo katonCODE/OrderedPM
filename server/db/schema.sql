@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS project_shares (
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    shared_with_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (project_id, shared_with_user_id)
+);
 -- Tasks table
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -90,6 +96,8 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);
+CREATE INDEX IF NOT EXISTS idx_project_shares_project_id ON project_shares(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_shares_shared_with_user_id ON project_shares(shared_with_user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
@@ -128,6 +136,7 @@ AFTER
 INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 -- Enable Row Level Security
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_shares ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE task_dependencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
@@ -144,6 +153,36 @@ CREATE POLICY "Users can update their own projects" ON projects FOR
 UPDATE USING (auth.uid() = user_id);
 -- Users can delete their own projects
 CREATE POLICY "Users can delete their own projects" ON projects FOR DELETE USING (auth.uid() = user_id);
+-- RLS Policies for project_shares
+CREATE POLICY "Users can view project shares for accessible projects" ON project_shares FOR
+SELECT USING (
+        EXISTS (
+            SELECT 1
+            FROM projects p
+            WHERE p.id = project_shares.project_id
+                AND (
+                    p.user_id = auth.uid()
+                    OR project_shares.shared_with_user_id = auth.uid()
+                )
+        )
+    );
+CREATE POLICY "Project owners can create project shares" ON project_shares FOR
+INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM projects p
+            WHERE p.id = project_shares.project_id
+                AND p.user_id = auth.uid()
+        )
+    );
+CREATE POLICY "Project owners can delete project shares" ON project_shares FOR DELETE USING (
+    EXISTS (
+        SELECT 1
+        FROM projects p
+        WHERE p.id = project_shares.project_id
+            AND p.user_id = auth.uid()
+    )
+);
 -- RLS Policies for tasks
 -- Users can only see tasks from their own projects
 CREATE POLICY "Users can view their own tasks" ON tasks FOR
