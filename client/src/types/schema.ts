@@ -69,6 +69,9 @@ export interface Task {
   total_subtasks?: number; // Total count of subtasks
   blocked_by_count?: number; // Count of tasks this task depends on
   blocking_count?: number; // Count of tasks blocked by this task
+  creator_username?: string | null;
+  creator_full_name?: string | null;
+  creator_avatar_url?: string | null;
 }
 
 // Type helpers for creating/updating entities

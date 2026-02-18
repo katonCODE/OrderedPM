@@ -188,6 +188,17 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
     return priority.charAt(0).toUpperCase() + priority.slice(1);
   };
 
+  const getCreatorName = (taskData) => taskData?.creator_full_name || taskData?.creator_username || 'Unknown';
+  const getCreatorInitials = (taskData) => {
+    const source = getCreatorName(taskData).trim();
+    if (!source) return '?';
+    const parts = source.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return source.slice(0, 2).toUpperCase();
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return null;
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -492,6 +503,26 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                   )}
                 </div>
               )}
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-400 mb-2">Created by</h3>
+                <div className="flex items-center gap-3">
+                  {currentTask.creator_avatar_url ? (
+                    <img
+                      src={currentTask.creator_avatar_url}
+                      alt={getCreatorName(currentTask)}
+                      className="w-8 h-8 rounded-full object-cover border border-white/20"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 text-xs text-gray-300 flex items-center justify-center font-semibold">
+                      {getCreatorInitials(currentTask)}
+                    </div>
+                  )}
+                  <div className="text-[#e0e0e0]">
+                    {getCreatorName(currentTask)}
+                  </div>
+                </div>
+              </div>
 
               {currentTask.tags && Array.isArray(currentTask.tags) && currentTask.tags.length > 0 && (
                 <div>

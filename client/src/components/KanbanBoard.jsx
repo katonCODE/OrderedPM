@@ -192,6 +192,17 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
     return priority.charAt(0).toUpperCase() + priority.slice(1);
   };
 
+  const getCreatorName = (task) => task.creator_full_name || task.creator_username || 'Unknown';
+  const getCreatorInitials = (task) => {
+    const source = getCreatorName(task).trim();
+    if (!source) return '?';
+    const parts = source.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return source.slice(0, 2).toUpperCase();
+  };
+
   const formatRecurrence = (task) => {
     if (!task?.recurrence_type) return null;
     const interval = task.recurrence_interval || 1;
@@ -379,6 +390,22 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                                       )}
                                     </div>
                                   )}
+                                  <div className="mt-3 pt-2 border-t border-white/10 flex items-center gap-2">
+                                    {task.creator_avatar_url ? (
+                                      <img
+                                        src={task.creator_avatar_url}
+                                        alt={getCreatorName(task)}
+                                        className="w-5 h-5 rounded-full object-cover border border-white/20"
+                                      />
+                                    ) : (
+                                      <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 text-[10px] text-gray-300 flex items-center justify-center font-semibold">
+                                        {getCreatorInitials(task)}
+                                      </div>
+                                    )}
+                                    <span className="text-xs text-gray-400 truncate">
+                                      {getCreatorName(task)}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             )}

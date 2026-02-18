@@ -203,6 +203,9 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT 
         t.*,
+        tp.username AS creator_username,
+        tp.full_name AS creator_full_name,
+        tp.avatar_url AS creator_avatar_url,
         (
           SELECT COUNT(*)
           FROM task_dependencies td
@@ -217,8 +220,9 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
         COUNT(st.id) as total_subtasks
       FROM tasks t
       LEFT JOIN tasks st ON st.parent_task_id = t.id
+      LEFT JOIN profiles tp ON tp.id = t.user_id
       WHERE t.project_id = $1 AND t.parent_task_id IS NULL
-      GROUP BY t.id
+      GROUP BY t.id, tp.username, tp.full_name, tp.avatar_url
       ORDER BY COALESCE(t.position, 0) ASC, t.created_at DESC
       LIMIT $2 OFFSET $3`,
       [req.params.projectId, validLimit, validOffset]
@@ -229,7 +233,15 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
     let subtasks = [];
     if (parentTaskIds.length > 0) {
       const subtasksResult = await pool.query(
-        'SELECT * FROM tasks WHERE parent_task_id = ANY($1) ORDER BY created_at ASC',
+        `SELECT
+          t.*,
+          p.username AS creator_username,
+          p.full_name AS creator_full_name,
+          p.avatar_url AS creator_avatar_url
+         FROM tasks t
+         LEFT JOIN profiles p ON p.id = t.user_id
+         WHERE t.parent_task_id = ANY($1)
+         ORDER BY t.created_at ASC`,
         [parentTaskIds]
       );
       subtasks = subtasksResult.rows;
@@ -609,6 +621,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT 
         t.*,
+        tp.username AS creator_username,
+        tp.full_name AS creator_full_name,
+        tp.avatar_url AS creator_avatar_url,
         (
           SELECT COUNT(*)
           FROM task_dependencies td
@@ -623,13 +638,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
         COUNT(st.id) as total_subtasks
       FROM tasks t
       LEFT JOIN tasks st ON st.parent_task_id = t.id
+      LEFT JOIN profiles tp ON tp.id = t.user_id
       JOIN projects p ON p.id = t.project_id
       LEFT JOIN project_shares ps
         ON ps.project_id = p.id
        AND ps.shared_with_user_id = $2
       WHERE t.id = $1
         AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
-      GROUP BY t.id`,
+      GROUP BY t.id, tp.username, tp.full_name, tp.avatar_url`,
       [req.params.id, req.userId]
     );
 
@@ -641,7 +657,15 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     // Get subtasks
     const subtasksResult = await pool.query(
-      'SELECT * FROM tasks WHERE parent_task_id = $1 ORDER BY created_at ASC',
+      `SELECT
+        t.*,
+        p.username AS creator_username,
+        p.full_name AS creator_full_name,
+        p.avatar_url AS creator_avatar_url
+       FROM tasks t
+       LEFT JOIN profiles p ON p.id = t.user_id
+       WHERE t.parent_task_id = $1
+       ORDER BY t.created_at ASC`,
       [req.params.id]
     );
 
