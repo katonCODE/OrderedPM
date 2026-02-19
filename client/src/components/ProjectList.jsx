@@ -49,14 +49,18 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
                 Archived
               </div>
             )}
-            {!project.archived && stats.overdueTasks > 0 && (
-              <div className="absolute top-3 right-3 px-2 py-1 bg-red-500/20 border border-red-500/30 rounded text-xs text-red-400 font-medium">
-                {stats.overdueTasks} overdue
-              </div>
-            )}
-            {!isOwner && (
-              <div className="absolute top-3 left-3 px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium">
-                Shared
+            {!project.archived && (
+              <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
+                {!isOwner && (
+                  <div className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium">
+                    Shared
+                  </div>
+                )}
+                {stats.overdueTasks > 0 && (
+                  <div className="px-2 py-1 bg-red-500/20 border border-red-500/30 rounded text-xs text-red-400 font-medium">
+                    {stats.overdueTasks} overdue
+                  </div>
+                )}
               </div>
             )}
 

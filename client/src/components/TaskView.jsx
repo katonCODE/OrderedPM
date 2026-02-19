@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tasksAPI } from '../services/api';
 import SubtaskList from './SubtaskList';
 
-function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
+function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, canDeleteTasks = true }) {
   const queryClient = useQueryClient();
   const [selectedBlockerId, setSelectedBlockerId] = useState('');
   const [dependencyError, setDependencyError] = useState('');
@@ -293,15 +293,18 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
 
               <div>
                 <h3 className="text-sm font-semibold text-gray-400 mb-2">Focus Session</h3>
+                {!canManageTasks && (
+                  <p className="text-xs text-gray-500 mb-3">Read-only access.</p>
+                )}
                 {focusError && (
                   <p className="text-xs text-red-400 mb-3">{focusError}</p>
                 )}
-                {activeFocusOnAnotherTask && (
+                {canManageTasks && activeFocusOnAnotherTask && (
                   <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-300">
                     You already have an active focus session on another task.
                   </div>
                 )}
-                {isActiveFocusOnCurrentTask ? (
+                {canManageTasks && isActiveFocusOnCurrentTask ? (
                   <div className="space-y-3">
                     <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                       <p className="text-xs text-gray-400 mb-1">Time Remaining</p>
@@ -362,7 +365,7 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : canManageTasks ? (
                   <div className="space-y-3">
                     <div className="flex items-end gap-3">
                       <div>
@@ -386,7 +389,7 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                     </div>
                     <p className="text-xs text-gray-500">Pick one task, start a timer, and log outcome when done.</p>
                   </div>
-                )}
+                ) : null}
                 {focusSessions.length > 0 && (
                   <div className="mt-4">
                     <p className="text-xs text-gray-400 mb-2">Recent Sessions</p>
@@ -421,19 +424,21 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                         {blockedBy.map((dep) => (
                           <div key={dep.id} className="flex items-center justify-between gap-3 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg">
                             <span className="text-sm text-[#e0e0e0]">{dep.title}</span>
-                            <button
-                              onClick={() => removeDependencyMutation.mutate(dep.id)}
-                              disabled={removeDependencyMutation.isPending}
-                              className="px-2 py-1 text-xs text-orange-300 border border-orange-500/30 rounded hover:bg-orange-500/20 transition-all disabled:opacity-50"
-                              title="Remove blocker"
-                            >
-                              Remove
-                            </button>
+                            {canManageTasks && (
+                              <button
+                                onClick={() => removeDependencyMutation.mutate(dep.id)}
+                                disabled={removeDependencyMutation.isPending}
+                                className="px-2 py-1 text-xs text-orange-300 border border-orange-500/30 rounded hover:bg-orange-500/20 transition-all disabled:opacity-50"
+                                title="Remove blocker"
+                              >
+                                Remove
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
-                    {availableBlockers.length > 0 && (
+                    {canManageTasks && availableBlockers.length > 0 && (
                       <div className="flex gap-2 mt-3">
                         <select
                           value={selectedBlockerId}
@@ -544,6 +549,8 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                 <SubtaskList
                   task={currentTask}
                   subtasks={currentTask.subtasks || []}
+                  canManageTasks={canManageTasks}
+                  canDeleteTasks={canDeleteTasks}
                   onTaskUpdate={(updatedTask) => {
                     if (onTaskUpdate) {
                       onTaskUpdate(updatedTask);
@@ -559,15 +566,17 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate }) {
                 >
                   Close
                 </button>
-                <button
-                  onClick={() => {
-                    onEdit(currentTask);
-                    onClose();
-                  }}
-                  className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
-                >
-                  Edit Task
-                </button>
+                {canManageTasks && (
+                  <button
+                    onClick={() => {
+                      onEdit(currentTask);
+                      onClose();
+                    }}
+                    className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+                  >
+                    Edit Task
+                  </button>
+                )}
               </div>
             </div>
           </div>

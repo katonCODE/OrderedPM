@@ -34,6 +34,7 @@ function ProjectDetail() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [actionError, setActionError] = useState('');
   const [shareUsername, setShareUsername] = useState('');
+  const [sharePermissionLevel, setSharePermissionLevel] = useState('editor');
   const [shareError, setShareError] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
   const exportMenuRef = useRef(null);
@@ -59,6 +60,9 @@ function ProjectDetail() {
   const tasks = tasksData?.data || tasksData || [];
   const shares = sharesData?.data || [];
   const isOwner = project?.is_owner !== false;
+  const permissionLevel = isOwner ? 'admin' : (project?.permission_level || 'viewer');
+  const canManageTasks = isOwner || permissionLevel === 'editor' || permissionLevel === 'admin';
+  const canDeleteTasks = isOwner || permissionLevel === 'admin';
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
@@ -307,9 +311,10 @@ function ProjectDetail() {
   });
 
   const addShareMutation = useMutation({
-    mutationFn: (username) => projectsAPI.shareWithUsername(id, username),
+    mutationFn: ({ username, permissionLevel }) => projectsAPI.shareWithUsername(id, username, permissionLevel),
     onSuccess: () => {
       setShareUsername('');
+      setSharePermissionLevel('editor');
       setShareError('');
       setShareSuccess('Project shared successfully.');
       queryClient.invalidateQueries({ queryKey: ['projectShares', id] });
@@ -349,6 +354,7 @@ function ProjectDetail() {
   };
 
   const handleEditClick = (task) => {
+    if (!canManageTasks) return;
     setEditingTask(task);
     setShowForm(true);
   };
@@ -361,6 +367,7 @@ function ProjectDetail() {
   };
 
   const handleNewTaskClick = () => {
+    if (!canManageTasks) return;
     if (editingTask) {
       setShowForm(true);
     } else {
@@ -369,11 +376,13 @@ function ProjectDetail() {
   };
 
   const handleSelectManual = () => {
+    if (!canManageTasks) return;
     setShowCreationModal(false);
     setShowForm(true);
   };
 
   const handleSelectAI = () => {
+    if (!canManageTasks) return;
     setShowCreationModal(false);
     setShowAITaskForm(true);
   };
@@ -405,13 +414,13 @@ function ProjectDetail() {
       setShareError('Enter a username or email to share with');
       return;
     }
-    addShareMutation.mutate(identifier);
+    addShareMutation.mutate({ username: identifier, permissionLevel: sharePermissionLevel });
   };
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
     'c': () => {
-      if (!showForm && !showAITaskForm && !showCreationModal && !viewingTask) {
+      if (canManageTasks && !showForm && !showAITaskForm && !showCreationModal && !viewingTask) {
         setShowCreationModal(true);
       }
     },
@@ -436,7 +445,7 @@ function ProjectDetail() {
         setShowCreationModal(false);
       }
     },
-  }, [showForm, showAITaskForm, showCreationModal, viewingTask]);
+  }, [canManageTasks, showForm, showAITaskForm, showCreationModal, viewingTask]);
 
   if (loading && !project) {
     return (
@@ -510,7 +519,7 @@ function ProjectDetail() {
                 {isOwner ? (
                   <>
                     <p className="text-xs text-gray-400 mb-2">Share with username or email</p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mb-2">
                       <input
                         value={shareUsername}
                         onChange={(e) => {
@@ -521,6 +530,19 @@ function ProjectDetail() {
                         placeholder="username or email"
                         className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                       />
+                      <select
+                        value={sharePermissionLevel}
+                        onChange={(e) => {
+                          setSharePermissionLevel(e.target.value);
+                          setShareError('');
+                          setShareSuccess('');
+                        }}
+                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="editor">Editor</option>
+                        <option value="admin">Admin</option>
+                      </select>
                       <button
                         onClick={handleShareProject}
                         disabled={addShareMutation.isPending}
@@ -529,9 +551,18 @@ function ProjectDetail() {
                         {addShareMutation.isPending ? 'Sharing...' : 'Share'}
                       </button>
                     </div>
+                    <p className="text-xs text-gray-500">
+                      Viewer: Read-only • Editor: Create/Edit tasks • Admin: Full access
+                    </p>
                   </>
                 ) : (
-                  <p className="text-xs text-gray-400">You can edit tasks in this shared project.</p>
+                  <p className="text-xs text-gray-400">
+                    {permissionLevel === 'viewer'
+                      ? 'Read-only access: you can view tasks and task details.'
+                      : permissionLevel === 'editor'
+                        ? 'Editor access: you can create, edit, and move tasks.'
+                        : 'Admin access: you can create, edit, move, and delete tasks.'}
+                  </p>
                 )}
                 {shareError && <p className="text-xs text-red-400 mt-2">{shareError}</p>}
                 {shareSuccess && <p className="text-xs text-green-400 mt-2">{shareSuccess}</p>}
@@ -544,7 +575,14 @@ function ProjectDetail() {
                   ) : (
                     shares.map((share) => (
                       <div key={share.user_id} className="flex items-center justify-between text-xs text-gray-300">
-                        <span>{share.full_name || share.username}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{share.full_name || share.username}</span>
+                          {share.permission_level && (
+                            <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-400 capitalize">
+                              {share.permission_level}
+                            </span>
+                          )}
+                        </div>
                         {isOwner && (
                           <button
                             onClick={() => removeShareMutation.mutate(share.user_id)}
@@ -623,12 +661,14 @@ function ProjectDetail() {
       <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">Mission Control</h2>
-          <button
-            onClick={handleNewTaskClick}
-            className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
-          >
-            + New Task
-          </button>
+          {canManageTasks && (
+            <button
+              onClick={handleNewTaskClick}
+              className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+            >
+              + New Task
+            </button>
+          )}
         </div>
 
         {(error || actionError) && (
@@ -667,6 +707,8 @@ function ProjectDetail() {
             task={viewingTask}
             onEdit={handleEditClick}
             onClose={handleViewTaskClose}
+            canManageTasks={canManageTasks}
+            canDeleteTasks={canDeleteTasks}
             onTaskUpdate={(updatedTask) => {
               setViewingTask(updatedTask);
             }}
@@ -834,6 +876,9 @@ function ProjectDetail() {
                   onEdit={handleEditClick}
                   onDelete={handleDeleteTask}
                   onTaskClick={handleTaskClick}
+                  canEdit={canManageTasks}
+                  canDelete={canDeleteTasks}
+                  canReorder={canManageTasks}
                   selectedDate={selectedDate}
                   searchQuery={searchQuery}
                   selectedTag={selectedTag}

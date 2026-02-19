@@ -103,6 +103,43 @@ const hasProjectAccess = async (projectId, userId) => {
   return result.rows.length > 0;
 };
 
+const getProjectAccess = async (projectId, userId) => {
+  const result = await pool.query(
+    `SELECT p.id, p.user_id, ps.permission_level
+     FROM projects p
+     LEFT JOIN project_shares ps
+       ON ps.project_id = p.id
+      AND ps.shared_with_user_id = $2
+     WHERE p.id = $1
+       AND (p.user_id = $2 OR ps.shared_with_user_id IS NOT NULL)
+     LIMIT 1`,
+    [projectId, userId]
+  );
+
+  if (result.rows.length === 0) {
+    return { hasAccess: false, isOwner: false, permissionLevel: null };
+  }
+
+  const isOwner = result.rows[0].user_id === userId;
+  return {
+    hasAccess: true,
+    isOwner,
+    permissionLevel: isOwner ? 'admin' : (result.rows[0].permission_level || 'editor')
+  };
+};
+
+const canCreateTask = (access) => {
+  return access.isOwner || access.permissionLevel === 'editor' || access.permissionLevel === 'admin';
+};
+
+const canEditTask = (access) => {
+  return access.isOwner || access.permissionLevel === 'editor' || access.permissionLevel === 'admin';
+};
+
+const canDeleteTask = (access) => {
+  return access.isOwner || access.permissionLevel === 'admin';
+};
+
 const getAccessibleTask = async (taskId, userId) => {
   const result = await pool.query(
     `SELECT t.*
@@ -511,6 +548,13 @@ router.post('/:id/focus/start', authenticateToken, async (req, res) => {
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
+    const access = await getProjectAccess(task.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    if (!canEditTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to update tasks in this project' });
+    }
 
     const plannedMinutes = normalizeFocusMinutes(req.body?.planned_minutes);
     if (Number.isNaN(plannedMinutes)) {
@@ -560,6 +604,13 @@ router.post('/:id/focus/:sessionId/end', authenticateToken, async (req, res) => 
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
+    }
+    const access = await getProjectAccess(task.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    if (!canEditTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to update tasks in this project' });
     }
 
     const normalizedOutcome = req.body?.outcome
@@ -736,6 +787,13 @@ router.post('/:id/dependencies', authenticateToken, async (req, res) => {
     if (!taskRow) {
       return res.status(404).json({ error: 'Task not found' });
     }
+    const access = await getProjectAccess(taskRow.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    if (!canEditTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to update task dependencies in this project' });
+    }
 
     const blockerRow = await getAccessibleTask(blocker_task_id, req.userId);
     if (!blockerRow) {
@@ -790,6 +848,13 @@ router.delete('/:id/dependencies/:blockerId', authenticateToken, async (req, res
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
+    }
+    const access = await getProjectAccess(task.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    if (!canEditTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to update task dependencies in this project' });
     }
 
     const blocker = await getAccessibleTask(req.params.blockerId, req.userId);
@@ -955,9 +1020,12 @@ router.post('/', authenticateToken, async (req, res) => {
       parentTaskId = parent_task_id;
     }
 
-    const canAccessProject = await hasProjectAccess(projectId, req.userId);
-    if (!canAccessProject) {
+    const access = await getProjectAccess(projectId, req.userId);
+    if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!canCreateTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to create tasks in this project' });
     }
 
     const validStatus = status && ['todo', 'in_progress', 'done'].includes(status)
@@ -1055,6 +1123,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (!existingTaskRow) {
       return res.status(404).json({ error: 'Task not found' });
     }
+
+    // Check permissions
+    const access = await getProjectAccess(existingTaskRow.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    if (!canEditTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to edit tasks in this project' });
+    }
+
     const existingTask = { rows: [existingTaskRow] };
 
     const {
@@ -1467,6 +1545,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
 // Delete a task
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    // First check if task exists and get project access
+    const existingTaskRow = await getAccessibleTask(req.params.id, req.userId);
+    if (!existingTaskRow) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Check permissions
+    const access = await getProjectAccess(existingTaskRow.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    if (!canDeleteTask(access)) {
+      return res.status(403).json({ error: 'You do not have permission to delete tasks in this project' });
+    }
+
     const result = await pool.query(
       `DELETE FROM tasks
        WHERE id = $1

@@ -6,7 +6,7 @@ const authenticateToken = require('../middleware/auth');
 
 const getProjectAccess = async (projectId, userId) => {
   const result = await pool.query(
-    `SELECT p.id, p.user_id
+    `SELECT p.id, p.user_id, ps.permission_level
      FROM projects p
      LEFT JOIN project_shares ps
        ON ps.project_id = p.id
@@ -18,12 +18,14 @@ const getProjectAccess = async (projectId, userId) => {
   );
 
   if (result.rows.length === 0) {
-    return { hasAccess: false, isOwner: false };
+    return { hasAccess: false, isOwner: false, permissionLevel: null };
   }
 
+  const isOwner = result.rows[0].user_id === userId;
   return {
     hasAccess: true,
-    isOwner: result.rows[0].user_id === userId
+    isOwner,
+    permissionLevel: isOwner ? 'admin' : (result.rows[0].permission_level || 'editor')
   };
 };
 
@@ -44,7 +46,11 @@ router.get('/', authenticateToken, async (req, res) => {
 
     // Build query with optional archived filter
     let query = `SELECT p.*,
-        (p.user_id = $1) AS is_owner
+        (p.user_id = $1) AS is_owner,
+        CASE
+          WHEN p.user_id = $1 THEN 'admin'
+          ELSE COALESCE(ps.permission_level, 'viewer')
+        END AS permission_level
       FROM projects p
       LEFT JOIN project_shares ps
         ON ps.project_id = p.id
@@ -102,7 +108,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT p.*,
-         (p.user_id = $2) AS is_owner
+         (p.user_id = $2) AS is_owner,
+         CASE
+           WHEN p.user_id = $2 THEN 'admin'
+           ELSE COALESCE(ps.permission_level, 'viewer')
+         END AS permission_level
        FROM projects p
        LEFT JOIN project_shares ps
          ON ps.project_id = p.id
@@ -267,7 +277,7 @@ router.get('/:id/shares', authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      `SELECT ps.shared_with_user_id AS user_id, p.username, p.full_name, p.avatar_url
+      `SELECT ps.shared_with_user_id AS user_id, ps.permission_level, p.username, p.full_name, p.avatar_url
        FROM project_shares ps
        JOIN profiles p ON p.id = ps.shared_with_user_id
        WHERE ps.project_id = $1
@@ -295,6 +305,11 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
     const identifier = String(req.body?.username || req.body?.email || '').trim();
     if (!identifier) {
       return res.status(400).json({ error: 'Username or email is required' });
+    }
+
+    const permissionLevel = req.body?.permission_level || 'editor';
+    if (!['viewer', 'editor', 'admin'].includes(permissionLevel)) {
+      return res.status(400).json({ error: 'Invalid permission level. Must be viewer, editor, or admin' });
     }
 
     let targetUserResult;
@@ -337,17 +352,19 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
     }
 
     await pool.query(
-      `INSERT INTO project_shares (project_id, shared_with_user_id)
-       VALUES ($1, $2)
-       ON CONFLICT (project_id, shared_with_user_id) DO NOTHING`,
-      [req.params.id, targetUser.id]
+      `INSERT INTO project_shares (project_id, shared_with_user_id, permission_level)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (project_id, shared_with_user_id) 
+       DO UPDATE SET permission_level = $3`,
+      [req.params.id, targetUser.id, permissionLevel]
     );
 
     res.status(201).json({
       user_id: targetUser.id,
       username: targetUser.username,
       full_name: targetUser.full_name,
-      avatar_url: targetUser.avatar_url
+      avatar_url: targetUser.avatar_url,
+      permission_level: permissionLevel
     });
   } catch (error) {
     console.error('Error sharing project:', error);

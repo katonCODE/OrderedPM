@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { tasksAPI } from '../services/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
+function SubtaskList({ task, subtasks = [], onTaskUpdate, canManageTasks = true, canDeleteTasks = true }) {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const queryClient = useQueryClient();
@@ -158,6 +158,7 @@ function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
   });
 
   const handleToggleSubtask = (subtask) => {
+    if (!canManageTasks) return;
     const newStatus = subtask.status === 'done' ? 'todo' : 'done';
     updateSubtaskMutation.mutate({
       subtaskId: subtask.id,
@@ -166,6 +167,7 @@ function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
   };
 
   const handleAddSubtask = (e) => {
+    if (!canManageTasks) return;
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -176,6 +178,7 @@ function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
   };
 
   const handleDeleteSubtask = (subtaskId) => {
+    if (!canDeleteTasks) return;
     if (window.confirm('Are you sure you want to delete this subtask?')) {
       deleteSubtaskMutation.mutate(subtaskId);
     }
@@ -196,7 +199,7 @@ function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
             </span>
           )}
         </div>
-        {!isAdding && (
+        {canManageTasks && !isAdding && (
           <button
             onClick={() => setIsAdding(true)}
             className="text-xs px-2 py-1 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-[#e0e0e0]"
@@ -225,6 +228,7 @@ function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
               type="checkbox"
               checked={subtask.status === 'done'}
               onChange={() => handleToggleSubtask(subtask)}
+              disabled={!canManageTasks}
               className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-2 focus:ring-blue-500/50 cursor-pointer"
             />
             <span
@@ -235,18 +239,20 @@ function SubtaskList({ task, subtasks = [], onTaskUpdate }) {
             >
               {subtask.title}
             </span>
-            <button
-              onClick={() => handleDeleteSubtask(subtask.id)}
-              className="text-xs px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
-              title="Delete subtask"
-            >
-              ✕
-            </button>
+            {canDeleteTasks && (
+              <button
+                onClick={() => handleDeleteSubtask(subtask.id)}
+                className="text-xs px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-all"
+                title="Delete subtask"
+              >
+                ✕
+              </button>
+            )}
           </div>
         ))}
       </div>
 
-      {isAdding && (
+      {canManageTasks && isAdding && (
         <div
           className="flex gap-2"
           onClick={(e) => e.stopPropagation()}

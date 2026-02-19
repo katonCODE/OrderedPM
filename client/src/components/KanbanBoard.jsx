@@ -2,7 +2,22 @@
 import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete, onTaskClick, selectedDate, searchQuery, selectedTag, selectedPriority, sortByPriority }) {
+function KanbanBoard({
+  tasks,
+  onStatusChange,
+  onPositionChange,
+  onEdit,
+  onDelete,
+  onTaskClick,
+  selectedDate,
+  searchQuery,
+  selectedTag,
+  selectedPriority,
+  sortByPriority,
+  canEdit = true,
+  canDelete = true,
+  canReorder = true
+}) {
   const columns = [
     { id: 'todo', title: 'To Do', status: 'todo' },
     { id: 'in_progress', title: 'In Progress', status: 'in_progress' },
@@ -67,6 +82,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
   };
 
   const handleDragEnd = (result) => {
+    if (!canReorder) return;
     const { destination, source, draggableId } = result;
 
     // Step 1: Early validation
@@ -263,7 +279,7 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                         </div>
                       ) : (
                         columnTasks.map((task, index) => (
-                          <Draggable key={task.id} draggableId={String(task.id)} index={index}>
+                          <Draggable key={task.id} draggableId={String(task.id)} index={index} isDragDisabled={!canReorder}>
                             {(provided, snapshot) => (
                               <div
                                 ref={provided.innerRef}
@@ -279,41 +295,49 @@ function KanbanBoard({ tasks, onStatusChange, onPositionChange, onEdit, onDelete
                                   : ''
                                   }`}
                               >
-                                <div
-                                  {...provided.dragHandleProps}
-                                  className="absolute top-2 left-2 w-6 h-6 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 hover:text-gray-400"
-                                  title="Drag to reorder"
-                                >
-                                  ⋮⋮
-                                </div>
+                                {canReorder && (
+                                  <div
+                                    {...provided.dragHandleProps}
+                                    className="absolute top-2 left-2 w-6 h-6 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 hover:text-gray-400"
+                                    title="Drag to reorder"
+                                  >
+                                    ⋮⋮
+                                  </div>
+                                )}
                                 <div
                                   onClick={() => onTaskClick && onTaskClick(task)}
-                                  className="cursor-pointer pl-8"
+                                  className={`cursor-pointer ${canReorder ? 'pl-8' : ''}`}
                                 >
                                   <div className="flex justify-between items-start gap-2 mb-2">
                                     <h4 className="text-base font-semibold text-[#e0e0e0] flex-1 leading-tight">{task.title}</h4>
-                                    <div className="flex gap-1 flex-shrink-0">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onEdit(task);
-                                        }}
-                                        className="p-1.5 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
-                                        title="Edit"
-                                      >
-                                        ✏️
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onDelete(task.id);
-                                        }}
-                                        className="p-1.5 bg-white/5 border border-red-500/20 rounded hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
-                                        title="Delete"
-                                      >
-                                        🗑️
-                                      </button>
-                                    </div>
+                                    {(canEdit || canDelete) && (
+                                      <div className="flex gap-1 flex-shrink-0">
+                                        {canEdit && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onEdit(task);
+                                            }}
+                                            className="p-1.5 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
+                                            title="Edit"
+                                          >
+                                            ✏️
+                                          </button>
+                                        )}
+                                        {canDelete && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onDelete(task.id);
+                                            }}
+                                            className="p-1.5 bg-white/5 border border-red-500/20 rounded hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                                            title="Delete"
+                                          >
+                                            🗑️
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                   {task.description && (
                                     <p className="text-sm text-gray-400 mb-3 line-clamp-2">{task.description}</p>

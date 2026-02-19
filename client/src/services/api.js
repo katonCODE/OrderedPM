@@ -42,13 +42,6 @@ const refreshToken = async () => {
 
 const handleResponse = async (response, originalRequest) => {
   if (!response.ok) {
-    if (response.status === 403) {
-      const error = new Error('Token expired');
-      error.status = 403;
-      error.originalRequest = originalRequest;
-      throw error;
-    }
-
     const contentType = response.headers.get('content-type');
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -64,6 +57,22 @@ const handleResponse = async (response, originalRequest) => {
       }
     } catch (parseError) {
       // If parsing fails, use the status-based message
+    }
+
+    const normalizedMessage = String(errorMessage || '').toLowerCase();
+    const isAuthError =
+      response.status === 401 ||
+      (response.status === 403 && (
+        normalizedMessage.includes('invalid or expired token') ||
+        normalizedMessage.includes('token expired')
+      ));
+
+    if (isAuthError) {
+      const error = new Error(errorMessage || 'Session expired');
+      error.status = response.status;
+      error.originalRequest = originalRequest;
+      error.isAuthError = true;
+      throw error;
     }
 
     throw new Error(errorMessage);
@@ -96,7 +105,7 @@ const fetchWithAuth = async (url, options = {}) => {
   try {
     return await makeRequest();
   } catch (error) {
-    if (error.status === 403 && error.originalRequest) {
+    if (error.isAuthError && error.originalRequest) {
       try {
         await refreshToken();
         return await makeRequest();
@@ -234,10 +243,12 @@ export const projectsAPI = {
     }
   },
 
-  shareWithUsername: async (id, identifier) => {
+  shareWithUsername: async (id, identifier, permissionLevel = 'editor') => {
     try {
       const isEmail = identifier.includes('@');
-      const body = isEmail ? { email: identifier } : { username: identifier };
+      const body = isEmail
+        ? { email: identifier, permission_level: permissionLevel }
+        : { username: identifier, permission_level: permissionLevel };
       return await fetchWithAuth(`${API_URL}/api/projects/${id}/shares`, {
         method: 'POST',
         body: JSON.stringify(body),
