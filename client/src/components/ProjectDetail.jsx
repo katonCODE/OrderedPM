@@ -37,8 +37,11 @@ function ProjectDetail() {
   const [sharePermissionLevel, setSharePermissionLevel] = useState('editor');
   const [shareError, setShareError] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
+  const [shareSearchTerm, setShareSearchTerm] = useState('');
+  const [showShareSuggestions, setShowShareSuggestions] = useState(false);
   const exportMenuRef = useRef(null);
   const globalSearchRef = useRef(null);
+  const shareAutocompleteRef = useRef(null);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ['project', id],
@@ -54,11 +57,17 @@ function ProjectDetail() {
     queryFn: () => projectsAPI.getShares(id),
     enabled: Boolean(project),
   });
+  const { data: shareCandidatesData, isLoading: shareCandidatesLoading } = useQuery({
+    queryKey: ['shareCandidates', id, shareSearchTerm],
+    queryFn: () => projectsAPI.searchShareCandidates(id, shareSearchTerm),
+    enabled: Boolean(project) && shareSearchTerm.length >= 2,
+  });
 
   // Handle both old format (array) and new format (object with data and pagination)
   // For KanbanBoard, we need all tasks, so we use a large limit
   const tasks = tasksData?.data || tasksData || [];
   const shares = sharesData?.data || [];
+  const shareCandidates = shareCandidatesData?.data || [];
   const isOwner = project?.is_owner !== false;
   const permissionLevel = isOwner ? 'admin' : (project?.permission_level || 'viewer');
   const canManageTasks = isOwner || permissionLevel === 'editor' || permissionLevel === 'admin';
@@ -108,9 +117,19 @@ function ProjectDetail() {
   }, [location.state?.openTaskId]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setShareSearchTerm(shareUsername.trim());
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [shareUsername]);
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
         setShowExportMenu(false);
+      }
+      if (shareAutocompleteRef.current && !shareAutocompleteRef.current.contains(event.target)) {
+        setShowShareSuggestions(false);
       }
     };
 
@@ -415,6 +434,15 @@ function ProjectDetail() {
       return;
     }
     addShareMutation.mutate({ username: identifier, permissionLevel: sharePermissionLevel });
+    setShowShareSuggestions(false);
+  };
+
+  const handleShareCandidateSelect = (candidate) => {
+    setShareUsername(candidate.username || '');
+    setShareSearchTerm(candidate.username || '');
+    setShowShareSuggestions(false);
+    setShareError('');
+    setShareSuccess('');
   };
 
   // Keyboard shortcuts
@@ -520,16 +548,42 @@ function ProjectDetail() {
                   <>
                     <p className="text-xs text-gray-400 mb-2">Share with username or email</p>
                     <div className="flex gap-2 mb-2">
-                      <input
-                        value={shareUsername}
-                        onChange={(e) => {
-                          setShareUsername(e.target.value);
-                          setShareError('');
-                          setShareSuccess('');
-                        }}
-                        placeholder="username or email"
-                        className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                      />
+                      <div className="relative flex-1" ref={shareAutocompleteRef}>
+                        <input
+                          value={shareUsername}
+                          onChange={(e) => {
+                            setShareUsername(e.target.value);
+                            setShareError('');
+                            setShareSuccess('');
+                            setShowShareSuggestions(true);
+                          }}
+                          onFocus={() => setShowShareSuggestions(true)}
+                          placeholder="username or email"
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        />
+                        {showShareSuggestions && shareSearchTerm.length >= 2 && (
+                          <div className="absolute z-30 mt-1 w-full rounded-lg border border-white/10 bg-[#252525] shadow-xl overflow-hidden">
+                            {shareCandidatesLoading ? (
+                              <p className="px-3 py-2 text-xs text-gray-500">Searching users...</p>
+                            ) : shareCandidates.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-gray-500">No matching users</p>
+                            ) : (
+                              shareCandidates.map((candidate) => (
+                                <button
+                                  key={candidate.id}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => handleShareCandidateSelect(candidate)}
+                                  className="w-full px-3 py-2 text-left hover:bg-white/10 transition-colors"
+                                >
+                                  <p className="text-sm text-[#e0e0e0]">{candidate.full_name || candidate.username}</p>
+                                  <p className="text-xs text-gray-500">@{candidate.username}</p>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <select
                         value={sharePermissionLevel}
                         onChange={(e) => {

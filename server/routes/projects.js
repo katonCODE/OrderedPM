@@ -292,6 +292,50 @@ router.get('/:id/shares', authenticateToken, async (req, res) => {
   }
 });
 
+router.get('/:id/share-candidates', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!access.isOwner) {
+      return res.status(403).json({ error: 'Only the project owner can search users to share with' });
+    }
+
+    const q = String(req.query?.q || '').trim();
+    if (q.length < 2) {
+      return res.json({ data: [] });
+    }
+
+    const likeQuery = `%${q}%`;
+    const result = await pool.query(
+      `SELECT p.id, p.username, p.full_name, p.avatar_url
+       FROM profiles p
+       JOIN projects project ON project.id = $1
+       LEFT JOIN project_shares ps
+         ON ps.project_id = project.id
+        AND ps.shared_with_user_id = p.id
+       WHERE p.id != $2
+         AND p.id != project.user_id
+         AND ps.shared_with_user_id IS NULL
+         AND (
+           p.username ILIKE $3
+           OR COALESCE(p.full_name, '') ILIKE $3
+         )
+       ORDER BY
+         CASE WHEN p.username ILIKE $4 THEN 0 ELSE 1 END,
+         p.username ASC
+       LIMIT 8`,
+      [req.params.id, req.userId, likeQuery, `${q}%`]
+    );
+
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error fetching share candidates:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/:id/shares', authenticateToken, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);

@@ -243,6 +243,22 @@ export const projectsAPI = {
     }
   },
 
+  searchShareCandidates: async (id, q) => {
+    try {
+      const params = new URLSearchParams();
+      if (q && typeof q === 'string') {
+        params.append('q', q.trim());
+      }
+      const url = `${API_URL}/api/projects/${id}/share-candidates${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
   shareWithUsername: async (id, identifier, permissionLevel = 'editor') => {
     try {
       const isEmail = identifier.includes('@');
