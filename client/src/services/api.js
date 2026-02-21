@@ -289,6 +289,34 @@ export const projectsAPI = {
       throw error;
     }
   },
+
+  updateSharePermission: async (id, sharedUserId, permissionLevel) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/shares/${sharedUserId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ permission_level: permissionLevel }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  transferOwnership: async (id, newOwnerUserId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/transfer-ownership`, {
+        method: 'POST',
+        body: JSON.stringify({ new_owner_user_id: newOwnerUserId }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 
 // Tasks API

@@ -46,7 +46,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     // Explicitly allow localhost:3000 for local development
     const allowedOrigins = [
       'http://localhost:3000',
@@ -55,7 +55,7 @@ const corsOptions = {
       'https://orderedpm.onrender.com',
       'https://ordered-pm.vercel.app',     // Add your deployed frontend URL here
     ].filter(Boolean);
-    
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -65,7 +65,7 @@ const corsOptions = {
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 };
 
 // Middleware

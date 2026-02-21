@@ -72,6 +72,8 @@ function ProjectDetail() {
   const permissionLevel = isOwner ? 'admin' : (project?.permission_level || 'viewer');
   const canManageTasks = isOwner || permissionLevel === 'editor' || permissionLevel === 'admin';
   const canDeleteTasks = isOwner || permissionLevel === 'admin';
+  const canManageShares = isOwner || permissionLevel === 'admin';
+  const canGrantAdmin = isOwner;
 
   const loading = projectLoading || tasksLoading;
   const error = projectError?.message || tasksError?.message || '';
@@ -359,6 +361,37 @@ function ProjectDetail() {
     },
   });
 
+  const updateSharePermissionMutation = useMutation({
+    mutationFn: ({ sharedUserId, permissionLevel: nextPermissionLevel }) =>
+      projectsAPI.updateSharePermission(id, sharedUserId, nextPermissionLevel),
+    onSuccess: () => {
+      setShareError('');
+      setShareSuccess('Permission updated.');
+      queryClient.invalidateQueries({ queryKey: ['projectShares', id] });
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to update permission');
+    },
+  });
+
+  const transferOwnershipMutation = useMutation({
+    mutationFn: (newOwnerUserId) => projectsAPI.transferOwnership(id, newOwnerUserId),
+    onSuccess: () => {
+      setShareError('');
+      setShareSuccess('Ownership transferred. You are now an admin collaborator.');
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      queryClient.invalidateQueries({ queryKey: ['projectShares', id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to transfer ownership');
+    },
+  });
+
   const handleStatusChange = (taskId, newStatus) => {
     setActionError('');
     const task = tasks.find(t => t.id === taskId);
@@ -427,6 +460,11 @@ function ProjectDetail() {
   };
 
   const handleShareProject = () => {
+    if (!canManageShares) {
+      setShareSuccess('');
+      setShareError('You do not have permission to share this project');
+      return;
+    }
     const identifier = shareUsername.trim();
     if (!identifier) {
       setShareSuccess('');
@@ -435,6 +473,24 @@ function ProjectDetail() {
     }
     addShareMutation.mutate({ username: identifier, permissionLevel: sharePermissionLevel });
     setShowShareSuggestions(false);
+  };
+
+  const handleSharePermissionChange = (share, nextPermissionLevel) => {
+    if (!share || !share.user_id) return;
+    if (share.permission_level === nextPermissionLevel) return;
+    updateSharePermissionMutation.mutate({
+      sharedUserId: share.user_id,
+      permissionLevel: nextPermissionLevel
+    });
+  };
+
+  const handleTransferOwnership = (share) => {
+    if (!isOwner || !share?.user_id) return;
+    const confirmed = window.confirm(
+      `Transfer project ownership to ${share.full_name || share.username}? You will become an admin collaborator.`
+    );
+    if (!confirmed) return;
+    transferOwnershipMutation.mutate(share.user_id);
   };
 
   const handleShareCandidateSelect = (candidate) => {
@@ -544,9 +600,11 @@ function ProjectDetail() {
                 </p>
               )}
               <div className="mt-4 max-w-xl rounded-lg border border-white/10 bg-white/5 p-3">
-                {isOwner ? (
+                {canManageShares ? (
                   <>
-                    <p className="text-xs text-gray-400 mb-2">Share with username or email</p>
+                    <p className="text-xs text-gray-400 mb-2">
+                      {isOwner ? 'Share with username or email' : 'Share with username or email (viewer/editor only)'}
+                    </p>
                     <div className="flex gap-2 mb-2">
                       <div className="relative flex-1" ref={shareAutocompleteRef}>
                         <input
@@ -595,7 +653,7 @@ function ProjectDetail() {
                       >
                         <option value="viewer">Viewer</option>
                         <option value="editor">Editor</option>
-                        <option value="admin">Admin</option>
+                        {canGrantAdmin && <option value="admin">Admin</option>}
                       </select>
                       <button
                         onClick={handleShareProject}
@@ -627,27 +685,57 @@ function ProjectDetail() {
                   ) : shares.length === 0 ? (
                     <p className="text-xs text-gray-500">No collaborators yet.</p>
                   ) : (
-                    shares.map((share) => (
-                      <div key={share.user_id} className="flex items-center justify-between text-xs text-gray-300">
-                        <div className="flex items-center gap-2">
-                          <span>{share.full_name || share.username}</span>
-                          {share.permission_level && (
-                            <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-400 capitalize">
-                              {share.permission_level}
-                            </span>
-                          )}
+                    shares.map((share) => {
+                      const targetIsAdmin = share.permission_level === 'admin';
+                      const canEditThisShare = canManageShares && (isOwner || !targetIsAdmin);
+                      const canRemoveThisShare = canManageShares && (isOwner || !targetIsAdmin);
+                      const canTransferToThisShare = isOwner;
+                      return (
+                        <div key={share.user_id} className="flex items-center justify-between text-xs text-gray-300 gap-2">
+                          <div className="flex items-center gap-2">
+                            <span>{share.full_name || share.username}</span>
+                            {canEditThisShare ? (
+                              <select
+                                value={share.permission_level || 'viewer'}
+                                onChange={(e) => handleSharePermissionChange(share, e.target.value)}
+                                disabled={updateSharePermissionMutation.isPending}
+                                className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-300 capitalize focus:outline-none"
+                              >
+                                <option value="viewer">viewer</option>
+                                <option value="editor">editor</option>
+                                {isOwner && <option value="admin">admin</option>}
+                              </select>
+                            ) : (
+                              share.permission_level && (
+                                <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-400 capitalize">
+                                  {share.permission_level}
+                                </span>
+                              )
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {canTransferToThisShare && (
+                              <button
+                                onClick={() => handleTransferOwnership(share)}
+                                disabled={transferOwnershipMutation.isPending}
+                                className="text-blue-300 hover:text-blue-200 disabled:opacity-50"
+                              >
+                                Make owner
+                              </button>
+                            )}
+                            {canRemoveThisShare && (
+                              <button
+                                onClick={() => removeShareMutation.mutate(share.user_id)}
+                                disabled={removeShareMutation.isPending}
+                                className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        {isOwner && (
-                          <button
-                            onClick={() => removeShareMutation.mutate(share.user_id)}
-                            disabled={removeShareMutation.isPending}
-                            className="text-red-400 hover:text-red-300 disabled:opacity-50"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

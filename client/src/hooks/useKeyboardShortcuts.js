@@ -44,6 +44,9 @@ export function useKeyboardShortcuts(shortcuts, deps = [], enabled = true) {
       // Skip other shortcuts if typing
       if (isInput) return;
 
+      // Ignore app shortcuts when modifier keys are held (e.g. Ctrl+C / Cmd+C)
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
       // Handle key combinations
       const key = e.key.toLowerCase();
       const handler = shortcutsRef.current[key];

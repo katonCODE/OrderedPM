@@ -29,6 +29,13 @@ const getProjectAccess = async (projectId, userId) => {
   };
 };
 
+const canManageShares = (access) => access.isOwner || access.permissionLevel === 'admin';
+const canAssignPermissionLevel = (access, permissionLevel) => {
+  if (access.isOwner) return true;
+  if (access.permissionLevel !== 'admin') return false;
+  return permissionLevel === 'viewer' || permissionLevel === 'editor';
+};
+
 // Get all projects for the authenticated user
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -298,8 +305,8 @@ router.get('/:id/share-candidates', authenticateToken, async (req, res) => {
     if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    if (!access.isOwner) {
-      return res.status(403).json({ error: 'Only the project owner can search users to share with' });
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can search users to share with' });
     }
 
     const q = String(req.query?.q || '').trim();
@@ -342,8 +349,8 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
     if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    if (!access.isOwner) {
-      return res.status(403).json({ error: 'Only the project owner can share this project' });
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can share this project' });
     }
 
     const identifier = String(req.body?.username || req.body?.email || '').trim();
@@ -354,6 +361,9 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
     const permissionLevel = req.body?.permission_level || 'editor';
     if (!['viewer', 'editor', 'admin'].includes(permissionLevel)) {
       return res.status(400).json({ error: 'Invalid permission level. Must be viewer, editor, or admin' });
+    }
+    if (!canAssignPermissionLevel(access, permissionLevel)) {
+      return res.status(403).json({ error: 'Admins can only assign viewer or editor permissions' });
     }
 
     let targetUserResult;
@@ -422,8 +432,35 @@ router.delete('/:id/shares/:sharedUserId', authenticateToken, async (req, res) =
     if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });
     }
-    if (!access.isOwner) {
-      return res.status(403).json({ error: 'Only the project owner can remove sharing' });
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can remove sharing' });
+    }
+
+    const projectResult = await pool.query(
+      'SELECT user_id FROM projects WHERE id = $1 LIMIT 1',
+      [req.params.id]
+    );
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (projectResult.rows[0].user_id === req.params.sharedUserId) {
+      return res.status(400).json({ error: 'Cannot remove the project owner' });
+    }
+
+    const targetShareResult = await pool.query(
+      `SELECT permission_level
+       FROM project_shares
+       WHERE project_id = $1
+         AND shared_with_user_id = $2
+       LIMIT 1`,
+      [req.params.id, req.params.sharedUserId]
+    );
+    if (targetShareResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+
+    if (!access.isOwner && targetShareResult.rows[0].permission_level === 'admin') {
+      return res.status(403).json({ error: 'Admins cannot remove other admins' });
     }
 
     await pool.query(
@@ -435,6 +472,139 @@ router.delete('/:id/shares/:sharedUserId', authenticateToken, async (req, res) =
   } catch (error) {
     console.error('Error removing project share:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/:id/shares/:sharedUserId', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can update sharing' });
+    }
+
+    const permissionLevel = String(req.body?.permission_level || '').trim();
+    if (!['viewer', 'editor', 'admin'].includes(permissionLevel)) {
+      return res.status(400).json({ error: 'Invalid permission level. Must be viewer, editor, or admin' });
+    }
+    if (!canAssignPermissionLevel(access, permissionLevel)) {
+      return res.status(403).json({ error: 'Admins can only set viewer or editor permissions' });
+    }
+
+    const projectResult = await pool.query(
+      'SELECT user_id FROM projects WHERE id = $1 LIMIT 1',
+      [req.params.id]
+    );
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (projectResult.rows[0].user_id === req.params.sharedUserId) {
+      return res.status(400).json({ error: 'Cannot change permissions for the project owner' });
+    }
+
+    const targetShareResult = await pool.query(
+      `SELECT permission_level
+       FROM project_shares
+       WHERE project_id = $1
+         AND shared_with_user_id = $2
+       LIMIT 1`,
+      [req.params.id, req.params.sharedUserId]
+    );
+    if (targetShareResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+    if (!access.isOwner && targetShareResult.rows[0].permission_level === 'admin') {
+      return res.status(403).json({ error: 'Admins cannot modify other admins' });
+    }
+
+    const result = await pool.query(
+      `UPDATE project_shares
+       SET permission_level = $1
+       WHERE project_id = $2
+         AND shared_with_user_id = $3
+       RETURNING shared_with_user_id AS user_id, permission_level`,
+      [permissionLevel, req.params.id, req.params.sharedUserId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating share permission:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/transfer-ownership', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!access.isOwner) {
+      return res.status(403).json({ error: 'Only the project owner can transfer ownership' });
+    }
+
+    const newOwnerUserId = String(req.body?.new_owner_user_id || '').trim();
+    if (!newOwnerUserId) {
+      return res.status(400).json({ error: 'new_owner_user_id is required' });
+    }
+    if (newOwnerUserId === req.userId) {
+      return res.status(400).json({ error: 'You already own this project' });
+    }
+
+    const shareResult = await client.query(
+      `SELECT shared_with_user_id
+       FROM project_shares
+       WHERE project_id = $1
+         AND shared_with_user_id = $2
+       LIMIT 1`,
+      [req.params.id, newOwnerUserId]
+    );
+    if (shareResult.rows.length === 0) {
+      return res.status(400).json({ error: 'New owner must already be a collaborator on this project' });
+    }
+
+    await client.query('BEGIN');
+
+    const projectUpdateResult = await client.query(
+      `UPDATE projects
+       SET user_id = $1,
+           updated_at = NOW()
+       WHERE id = $2
+         AND user_id = $3
+       RETURNING id`,
+      [newOwnerUserId, req.params.id, req.userId]
+    );
+    if (projectUpdateResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    await client.query(
+      `INSERT INTO project_shares (project_id, shared_with_user_id, permission_level)
+       VALUES ($1, $2, 'admin')
+       ON CONFLICT (project_id, shared_with_user_id)
+       DO UPDATE SET permission_level = 'admin'`,
+      [req.params.id, req.userId]
+    );
+
+    await client.query(
+      `DELETE FROM project_shares
+       WHERE project_id = $1
+         AND shared_with_user_id = $2`,
+      [req.params.id, newOwnerUserId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ message: 'Project ownership transferred successfully', new_owner_user_id: newOwnerUserId });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error transferring project ownership:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 });
 
