@@ -41,6 +41,8 @@ function Dashboard({ onLogout }) {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
+  const [shareLinkInput, setShareLinkInput] = useState('');
+  const [joiningShareLink, setJoiningShareLink] = useState(false);
   const searchInputRef = useRef(null);
   const globalSearchRef = useRef(null);
   const itemsPerPage = 15;
@@ -151,17 +153,10 @@ function Dashboard({ onLogout }) {
       );
     }
 
-    if (filter === 'active') {
-      const projectIdsWithActiveTasks = new Set(
-        allTasks
-          .filter(t => t.status === 'todo' || t.status === 'in_progress')
-          .map(t => t.project_id)
-      );
-      filtered = filtered.filter(p => projectIdsWithActiveTasks.has(p.id));
-    } else if (filter === 'recent') {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      filtered = filtered.filter(p => new Date(p.updated_at || p.created_at) >= sevenDaysAgo);
+    if (filter === 'owned') {
+      filtered = filtered.filter(p => p.is_owner !== false);
+    } else if (filter === 'shared') {
+      filtered = filtered.filter(p => p.is_owner === false);
     }
 
     filtered.sort((a, b) => {
@@ -190,6 +185,17 @@ function Dashboard({ onLogout }) {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredAndSortedProjects.slice(start, start + itemsPerPage);
   }, [filteredAndSortedProjects, currentPage]);
+
+  const groupedProjects = useMemo(() => {
+    const owned = paginatedProjects.filter((project) => project.is_owner !== false);
+    const shared = paginatedProjects.filter((project) => project.is_owner === false);
+    return {
+      owned,
+      sharedAdmin: shared.filter((project) => project.permission_level === 'admin'),
+      sharedEditor: shared.filter((project) => project.permission_level === 'editor'),
+      sharedViewer: shared.filter((project) => project.permission_level === 'viewer'),
+    };
+  }, [paginatedProjects]);
 
   const totalPages = Math.ceil(filteredAndSortedProjects.length / itemsPerPage);
   const todayString = new Date().toISOString().slice(0, 10);
@@ -358,6 +364,7 @@ function Dashboard({ onLogout }) {
     setShowForm(true);
   };
 
+
   const handleFormClose = () => {
     setShowForm(false);
     setEditingProject(null);
@@ -494,6 +501,40 @@ function Dashboard({ onLogout }) {
     setShowQuickAddForm(false);
   };
 
+  const parseShareToken = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const match = raw.match(/\/share-links\/([a-f0-9]+)\/redeem/i);
+    if (match?.[1]) return match[1];
+    return raw;
+  };
+
+  const handleJoinSharedProject = async () => {
+    const token = parseShareToken(shareLinkInput);
+    if (!token) {
+      setImportError('Enter a share URL or token');
+      return;
+    }
+
+    setJoiningShareLink(true);
+    setImportError('');
+    setImportSuccess('');
+    try {
+      const result = await projectsAPI.redeemShareLink(token);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+      setImportSuccess('Joined shared project successfully.');
+      setShareLinkInput('');
+      if (result?.project_id) {
+        navigate(`/project/${result.project_id}`);
+      }
+    } catch (error) {
+      setImportError(error.message || 'Failed to join shared project');
+    } finally {
+      setJoiningShareLink(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
       {/* Background gradient effects */}
@@ -550,15 +591,15 @@ function Dashboard({ onLogout }) {
 
       {/* Main Content */}
       <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">
-              {activeTab === 'today' ? "Build Today's plan" : activeTab === 'upcoming' ? 'Upcoming Tasks' : 'My Projects'}
-            </h2>
-            <div className="flex gap-2 mt-3">
+        <div className="mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0] mb-4">
+            {activeTab === 'today' ? "Build Today's plan" : activeTab === 'upcoming' ? 'Upcoming Tasks' : 'My Projects'}
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-2 items-center">
               <button
                 onClick={() => setActiveTab('projects')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'projects'
+                className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'projects'
                   ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                   }`}
@@ -567,7 +608,7 @@ function Dashboard({ onLogout }) {
               </button>
               <button
                 onClick={() => setActiveTab('upcoming')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'upcoming'
+                className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'upcoming'
                   ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                   }`}
@@ -576,7 +617,7 @@ function Dashboard({ onLogout }) {
               </button>
               <button
                 onClick={() => setActiveTab('today')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'today'
+                className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'today'
                   ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                   }`}
@@ -584,58 +625,80 @@ function Dashboard({ onLogout }) {
                 Auto-Plan
               </button>
             </div>
-          </div>
-          <div className="flex gap-3">
-            {allProjects.length > 0 && activeTab === 'projects' && (
-              <div className="relative group">
-                <button
-                  className="px-4 py-3 bg-white/5 border border-white/10 text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all flex items-center gap-2"
-                  title="Export data"
-                >
-                  📥 Export Current Projects
-                </button>
-                <div className="absolute right-0 mt-2 w-48 bg-[#252525] border border-white/10 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+            {activeTab === 'projects' && (
+              <>
+                <div className="h-6 w-px bg-white/10"></div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={shareLinkInput}
+                    onChange={(e) => setShareLinkInput(e.target.value)}
+                    placeholder="Paste share link/token"
+                    className="h-11 px-3 w-52 bg-white/5 border border-white/10 rounded-lg text-sm leading-none text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
                   <button
-                    onClick={() => exportAllData(allProjects, allTasks, 'csv')}
-                    className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-t-lg"
+                    onClick={handleJoinSharedProject}
+                    disabled={joiningShareLink}
+                    className="h-11 px-4 bg-blue-500/20 border border-blue-500/30 text-sm leading-none text-blue-300 font-medium rounded-lg hover:bg-blue-500/30 transition-all inline-flex items-center justify-center whitespace-nowrap disabled:opacity-50"
                   >
-                    Export as CSV
-                  </button>
-                  <button
-                    onClick={() => exportAllData(allProjects, allTasks, 'json')}
-                    className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-b-lg"
-                  >
-                    Export as JSON
+                    {joiningShareLink ? 'Joining...' : 'Join via Link'}
                   </button>
                 </div>
-              </div>
+              </>
             )}
-            <div className="relative">
-              <input
-                type="file"
-                accept=".json,.csv"
-                onChange={handleFileInputChange}
-                className="hidden"
-                id="import-file-input"
-                disabled={importing}
-              />
-              <label
-                htmlFor="import-file-input"
-                className={`px-4 py-3 bg-white/5 border border-white/10 text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all flex items-center gap-2 cursor-pointer ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Import projects from JSON or CSV"
-              >
-                {importing ? '⏳ Importing...' : '📤 Import Projects'}
-              </label>
-            </div>
+            {allProjects.length > 0 && activeTab === 'projects' && (
+              <>
+                <div className="h-6 w-px bg-white/10"></div>
+                <div className="relative group">
+                  <button
+                    className="h-11 px-4 bg-white/5 border border-white/10 text-sm leading-none text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all inline-flex items-center justify-center gap-2 whitespace-nowrap"
+                    title="Export data"
+                  >
+                    📥 Export
+                  </button>
+                  <div className="absolute right-0 mt-2 w-48 bg-[#252525] border border-white/10 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                    <button
+                      onClick={() => exportAllData(allProjects, allTasks, 'csv')}
+                      className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-t-lg"
+                    >
+                      Export as CSV
+                    </button>
+                    <button
+                      onClick={() => exportAllData(allProjects, allTasks, 'json')}
+                      className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-b-lg"
+                    >
+                      Export as JSON
+                    </button>
+                  </div>
+                </div>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".json,.csv"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                    id="import-file-input"
+                    disabled={importing}
+                  />
+                  <label
+                    htmlFor="import-file-input"
+                    className={`h-11 px-4 bg-white/5 border border-white/10 text-sm leading-none text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Import projects from JSON or CSV"
+                  >
+                    {importing ? '⏳ Importing...' : '📤 Import'}
+                  </label>
+                </div>
+              </>
+            )}
+            <div className="h-6 w-px bg-white/10"></div>
             <button
               onClick={() => setShowQuickAddForm(true)}
-              className="px-6 py-3 bg-gradient-to-r from-blue-400 to-blue-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-blue-300 hover:to-blue-400 transition-all shadow-lg shadow-blue-500/20"
+              className="h-11 px-5 bg-gradient-to-r from-blue-400 to-blue-500 text-sm leading-none text-[#1a1a1a] font-semibold rounded-lg hover:from-blue-300 hover:to-blue-400 transition-all inline-flex items-center justify-center whitespace-nowrap shadow-lg shadow-blue-500/20"
             >
               + Quick Add Task
             </button>
             <button
               onClick={() => setShowForm(true)}
-              className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+              className="h-11 px-5 bg-gradient-to-r from-yellow-400 to-yellow-500 text-sm leading-none text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all inline-flex items-center justify-center whitespace-nowrap shadow-lg shadow-yellow-500/20"
             >
               + New Project
             </button>
@@ -745,19 +808,23 @@ function Dashboard({ onLogout }) {
                       />
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      {['all', 'active', 'recent'].map((f) => (
+                      {[
+                        { id: 'all', label: 'All' },
+                        { id: 'owned', label: 'Owned by me' },
+                        { id: 'shared', label: 'Shared with me' }
+                      ].map((f) => (
                         <button
-                          key={f}
+                          key={f.id}
                           onClick={() => {
-                            setFilter(f);
+                            setFilter(f.id);
                             setCurrentPage(1);
                           }}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f.id
                             ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
                             : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
                             }`}
                         >
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                          {f.label}
                         </button>
                       ))}
                       <button
@@ -790,15 +857,74 @@ function Dashboard({ onLogout }) {
                   </div>
                 </div>
 
-                <ProjectList
-                  projects={paginatedProjects}
-                  allTasks={allTasks}
-                  onEdit={handleEditClick}
-                  onDelete={handleDeleteClick}
-                  onArchive={handleArchiveClick}
-                  onRestore={handleRestoreClick}
-                  showArchived={showArchived}
-                />
+                {groupedProjects.owned.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Owned by me</h3>
+                    <ProjectList
+                      projects={groupedProjects.owned}
+                      allTasks={allTasks}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteClick}
+                      onArchive={handleArchiveClick}
+                      onRestore={handleRestoreClick}
+                      showArchived={showArchived}
+                    />
+                  </div>
+                )}
+                {groupedProjects.sharedAdmin.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Shared with me - Admin</h3>
+                    <ProjectList
+                      projects={groupedProjects.sharedAdmin}
+                      allTasks={allTasks}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteClick}
+                      onArchive={handleArchiveClick}
+                      onRestore={handleRestoreClick}
+                      showArchived={showArchived}
+                    />
+                  </div>
+                )}
+                {groupedProjects.sharedEditor.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Shared with me - Editor</h3>
+                    <ProjectList
+                      projects={groupedProjects.sharedEditor}
+                      allTasks={allTasks}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteClick}
+                      onArchive={handleArchiveClick}
+                      onRestore={handleRestoreClick}
+                      showArchived={showArchived}
+                    />
+                  </div>
+                )}
+                {groupedProjects.sharedViewer.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Shared with me - Viewer</h3>
+                    <ProjectList
+                      projects={groupedProjects.sharedViewer}
+                      allTasks={allTasks}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteClick}
+                      onArchive={handleArchiveClick}
+                      onRestore={handleRestoreClick}
+                      showArchived={showArchived}
+                    />
+                  </div>
+                )}
+                {paginatedProjects.length === 0 && (
+                  <ProjectList
+                    projects={[]}
+                    allTasks={allTasks}
+                    onEdit={handleEditClick}
+                    onDelete={handleDeleteClick}
+                    onArchive={handleArchiveClick}
+                    onRestore={handleRestoreClick}
+                    sectionTitle={filter === 'owned' ? 'Owned by me' : filter === 'shared' ? 'Shared with me' : 'All'}
+                    showArchived={showArchived}
+                  />
+                )}
                 {totalPages > 1 && (
                   <div className="mt-8">
                     <Pagination

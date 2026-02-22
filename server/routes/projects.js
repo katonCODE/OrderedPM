@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
+const crypto = require('crypto');
 
 const getProjectAccess = async (projectId, userId) => {
   const result = await pool.query(
@@ -34,6 +35,28 @@ const canAssignPermissionLevel = (access, permissionLevel) => {
   if (access.isOwner) return true;
   if (access.permissionLevel !== 'admin') return false;
   return permissionLevel === 'viewer' || permissionLevel === 'editor';
+};
+
+const resolveUserByIdentifier = async (identifier) => {
+  const value = String(identifier || '').trim();
+  if (!value) return null;
+  const isEmail = value.includes('@');
+  if (isEmail) {
+    const result = await pool.query(
+      `SELECT p.id, p.username, p.full_name, p.avatar_url
+       FROM profiles p
+       JOIN auth.users u ON u.id = p.id
+       WHERE LOWER(u.email) = LOWER($1)
+       LIMIT 1`,
+      [value]
+    );
+    return result.rows[0] || null;
+  }
+  const result = await pool.query(
+    'SELECT id, username, full_name, avatar_url FROM profiles WHERE username = $1 LIMIT 1',
+    [value]
+  );
+  return result.rows[0] || null;
 };
 
 // Get all projects for the authenticated user
@@ -366,30 +389,10 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Admins can only assign viewer or editor permissions' });
     }
 
-    let targetUserResult;
-    const isEmail = identifier.includes('@');
-
-    if (isEmail) {
-      targetUserResult = await pool.query(
-        `SELECT p.id, p.username, p.full_name, p.avatar_url
-         FROM profiles p
-         JOIN auth.users u ON u.id = p.id
-         WHERE LOWER(u.email) = LOWER($1)
-         LIMIT 1`,
-        [identifier]
-      );
-    } else {
-      targetUserResult = await pool.query(
-        'SELECT id, username, full_name, avatar_url FROM profiles WHERE username = $1 LIMIT 1',
-        [identifier]
-      );
-    }
-
-    if (targetUserResult.rows.length === 0) {
+    const targetUser = await resolveUserByIdentifier(identifier);
+    if (!targetUser) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    const targetUser = targetUserResult.rows[0];
     if (targetUser.id === req.userId) {
       return res.status(400).json({ error: 'You already own this project' });
     }
@@ -422,6 +425,124 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error sharing project:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/shares/bulk', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can share this project' });
+    }
+
+    const permissionLevel = req.body?.permission_level || 'editor';
+    if (!['viewer', 'editor', 'admin'].includes(permissionLevel)) {
+      return res.status(400).json({ error: 'Invalid permission level. Must be viewer, editor, or admin' });
+    }
+    if (!canAssignPermissionLevel(access, permissionLevel)) {
+      return res.status(403).json({ error: 'Admins can only assign viewer or editor permissions' });
+    }
+
+    const identifiers = Array.isArray(req.body?.identifiers) ? req.body.identifiers : [];
+    const cleanedIdentifiers = [...new Set(
+      identifiers
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )];
+
+    if (cleanedIdentifiers.length === 0) {
+      return res.status(400).json({ error: 'identifiers must contain at least one username or email' });
+    }
+    if (cleanedIdentifiers.length > 200) {
+      return res.status(400).json({ error: 'Maximum 200 identifiers per request' });
+    }
+
+    const projectOwnerResult = await pool.query(
+      'SELECT user_id FROM projects WHERE id = $1 LIMIT 1',
+      [req.params.id]
+    );
+    if (projectOwnerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const ownerUserId = projectOwnerResult.rows[0].user_id;
+
+    const results = [];
+    for (const identifier of cleanedIdentifiers) {
+      try {
+        const targetUser = await resolveUserByIdentifier(identifier);
+        if (!targetUser) {
+          results.push({ identifier, status: 'failed', error: 'User not found' });
+          continue;
+        }
+        if (targetUser.id === req.userId || targetUser.id === ownerUserId) {
+          results.push({ identifier, status: 'failed', error: 'Cannot share with yourself or owner' });
+          continue;
+        }
+
+        await pool.query(
+          `INSERT INTO project_shares (project_id, shared_with_user_id, permission_level)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (project_id, shared_with_user_id)
+           DO UPDATE SET permission_level = $3`,
+          [req.params.id, targetUser.id, permissionLevel]
+        );
+
+        results.push({
+          identifier,
+          status: 'shared',
+          user_id: targetUser.id,
+          username: targetUser.username,
+          full_name: targetUser.full_name,
+          permission_level: permissionLevel
+        });
+      } catch (error) {
+        results.push({ identifier, status: 'failed', error: 'Unexpected error sharing this user' });
+      }
+    }
+
+    const shared = results.filter((r) => r.status === 'shared').length;
+    const failed = results.length - shared;
+    res.status(201).json({
+      data: {
+        permission_level: permissionLevel,
+        results,
+        summary: { total: results.length, shared, failed }
+      }
+    });
+  } catch (error) {
+    console.error('Error bulk sharing project:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:id/leave', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (access.isOwner) {
+      return res.status(400).json({ error: 'Project owner cannot leave their own project' });
+    }
+
+    const result = await pool.query(
+      `DELETE FROM project_shares
+       WHERE project_id = $1
+         AND shared_with_user_id = $2
+       RETURNING project_id`,
+      [req.params.id, req.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+
+    res.json({ message: 'Left project successfully' });
+  } catch (error) {
+    console.error('Error leaving project:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -605,6 +726,148 @@ router.post('/:id/transfer-ownership', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     client.release();
+  }
+});
+
+router.get('/:id/share-links', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can manage share links' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, token, permission_level, expires_at, revoked_at, created_at
+       FROM project_share_links
+       WHERE project_id = $1
+       ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error fetching share links:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/share-links', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can manage share links' });
+    }
+
+    const permissionLevel = req.body?.permission_level || 'viewer';
+    if (!['viewer', 'editor', 'admin'].includes(permissionLevel)) {
+      return res.status(400).json({ error: 'Invalid permission level. Must be viewer, editor, or admin' });
+    }
+    if (!canAssignPermissionLevel(access, permissionLevel)) {
+      return res.status(403).json({ error: 'Admins can only create viewer or editor links' });
+    }
+
+    let expiresAt = null;
+    if (req.body?.expires_at) {
+      expiresAt = new Date(req.body.expires_at);
+      if (Number.isNaN(expiresAt.getTime())) {
+        return res.status(400).json({ error: 'Invalid expires_at date' });
+      }
+      if (expiresAt <= new Date()) {
+        return res.status(400).json({ error: 'expires_at must be in the future' });
+      }
+    }
+
+    const token = crypto.randomBytes(24).toString('hex');
+    const result = await pool.query(
+      `INSERT INTO project_share_links (project_id, created_by_user_id, token, permission_level, expires_at)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, token, permission_level, expires_at, revoked_at, created_at`,
+      [req.params.id, req.userId, token, permissionLevel, expiresAt]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating share link:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:id/share-links/:linkId', authenticateToken, async (req, res) => {
+  try {
+    const access = await getProjectAccess(req.params.id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    if (!canManageShares(access)) {
+      return res.status(403).json({ error: 'Only project owners or admins can manage share links' });
+    }
+
+    const result = await pool.query(
+      `UPDATE project_share_links
+       SET revoked_at = NOW()
+       WHERE id = $1
+         AND project_id = $2
+         AND revoked_at IS NULL
+       RETURNING id`,
+      [req.params.linkId, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+    res.json({ message: 'Share link revoked' });
+  } catch (error) {
+    console.error('Error revoking share link:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/share-links/:token/redeem', authenticateToken, async (req, res) => {
+  try {
+    const token = String(req.params.token || '').trim();
+    if (!token) {
+      return res.status(400).json({ error: 'Share token is required' });
+    }
+
+    const linkResult = await pool.query(
+      `SELECT psl.project_id, psl.permission_level, p.user_id AS owner_user_id
+       FROM project_share_links psl
+       JOIN projects p ON p.id = psl.project_id
+       WHERE psl.token = $1
+         AND psl.revoked_at IS NULL
+         AND (psl.expires_at IS NULL OR psl.expires_at > NOW())
+       LIMIT 1`,
+      [token]
+    );
+    if (linkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Share link is invalid, expired, or revoked' });
+    }
+
+    const link = linkResult.rows[0];
+    if (link.owner_user_id === req.userId) {
+      return res.status(400).json({ error: 'You already own this project' });
+    }
+
+    await pool.query(
+      `INSERT INTO project_shares (project_id, shared_with_user_id, permission_level)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (project_id, shared_with_user_id)
+       DO UPDATE SET permission_level = EXCLUDED.permission_level`,
+      [link.project_id, req.userId, link.permission_level]
+    );
+
+    res.status(201).json({
+      message: 'Project shared successfully',
+      project_id: link.project_id,
+      permission_level: link.permission_level
+    });
+  } catch (error) {
+    console.error('Error redeeming share link:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

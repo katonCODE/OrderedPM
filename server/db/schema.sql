@@ -18,6 +18,18 @@ CREATE TABLE IF NOT EXISTS project_shares (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (project_id, shared_with_user_id)
 );
+CREATE TABLE IF NOT EXISTS project_share_links (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_by_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    permission_level TEXT NOT NULL DEFAULT 'viewer' CHECK (
+        permission_level IN ('viewer', 'editor', 'admin')
+    ),
+    expires_at TIMESTAMP WITH TIME ZONE,
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
 -- Tasks table
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -98,6 +110,8 @@ CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);
 CREATE INDEX IF NOT EXISTS idx_project_shares_project_id ON project_shares(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_shares_shared_with_user_id ON project_shares(shared_with_user_id);
+CREATE INDEX IF NOT EXISTS idx_project_share_links_project_id ON project_share_links(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_share_links_token ON project_share_links(token);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id);
@@ -137,6 +151,7 @@ INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 -- Enable Row Level Security
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_share_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE task_dependencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
@@ -183,6 +198,33 @@ CREATE POLICY "Project owners can delete project shares" ON project_shares FOR D
             AND p.user_id = auth.uid()
     )
 );
+CREATE POLICY "Users can view share links for owned projects" ON project_share_links FOR
+SELECT USING (
+        EXISTS (
+            SELECT 1
+            FROM projects p
+            WHERE p.id = project_share_links.project_id
+                AND p.user_id = auth.uid()
+        )
+    );
+CREATE POLICY "Project owners can create share links" ON project_share_links FOR
+INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM projects p
+            WHERE p.id = project_share_links.project_id
+                AND p.user_id = auth.uid()
+        )
+    );
+CREATE POLICY "Project owners can update share links" ON project_share_links FOR
+UPDATE USING (
+        EXISTS (
+            SELECT 1
+            FROM projects p
+            WHERE p.id = project_share_links.project_id
+                AND p.user_id = auth.uid()
+        )
+    );
 -- RLS Policies for tasks
 -- Users can only see tasks from their own projects
 CREATE POLICY "Users can view their own tasks" ON tasks FOR

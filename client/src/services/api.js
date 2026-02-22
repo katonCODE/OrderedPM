@@ -317,6 +317,87 @@ export const projectsAPI = {
       throw error;
     }
   },
+
+  leave: async (id) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/leave`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  bulkShare: async (id, identifiers = [], permissionLevel = 'editor') => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/shares/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({
+          identifiers,
+          permission_level: permissionLevel,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  getShareLinks: async (id) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/share-links`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  createShareLink: async (id, { permission_level = 'viewer', expires_at = null } = {}) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/share-links`, {
+        method: 'POST',
+        body: JSON.stringify({ permission_level, expires_at }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  revokeShareLink: async (id, linkId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/${id}/share-links/${linkId}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  redeemShareLink: async (token) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/projects/share-links/${token}/redeem`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 
 // Tasks API

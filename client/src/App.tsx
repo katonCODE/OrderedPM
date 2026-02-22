@@ -7,6 +7,7 @@ import { User } from './types/schema';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ProjectDetail from './components/ProjectDetail';
+import ShareLinkRedeem from './components/ShareLinkRedeem';
 import EmailConfirmation from './components/EmailConfirmation';
 import Profile from './components/Profile';
 import LandingPage from './components/LandingPage';
@@ -134,6 +135,20 @@ function App() {
               user ? (
                 emailConfirmed ? (
                   <ProjectDetail />
+                ) : (
+                  <EmailConfirmation />
+                )
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/share-links/:token/redeem"
+            element={
+              user ? (
+                emailConfirmed ? (
+                  <ShareLinkRedeem />
                 ) : (
                   <EmailConfirmation />
                 )

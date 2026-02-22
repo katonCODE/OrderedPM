@@ -1,8 +1,18 @@
 // client/src/components/ProjectList.js
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 
-function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onRestore, showArchived = false }) {
+function ProjectList({
+  projects,
+  allTasks = [],
+  onEdit,
+  onDelete,
+  onArchive,
+  onRestore,
+  onLeave,
+  sectionTitle = '',
+  showArchived = false
+}) {
   const getProjectStats = (projectId) => {
     const projectTasks = allTasks.filter(t => t.project_id === projectId);
     const totalTasks = projectTasks.length;
@@ -24,7 +34,10 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
   if (projects.length === 0) {
     return (
       <div className="text-center py-20 text-gray-400 text-lg">
-        <p>No projects found. {allTasks.length === 0 ? 'Create your first project to get started!' : 'Try adjusting your search or filters.'}</p>
+        <p>
+          {sectionTitle ? `${sectionTitle}: ` : ''}
+          No projects found. {allTasks.length === 0 ? 'Create your first project to get started!' : 'Try adjusting your search or filters.'}
+        </p>
       </div>
     );
   }
@@ -52,8 +65,8 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
             {!project.archived && (
               <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
                 {!isOwner && (
-                  <div className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium">
-                    Shared
+                  <div className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium capitalize">
+                    Shared ({project.permission_level || 'viewer'})
                   </div>
                 )}
                 {stats.overdueTasks > 0 && (
@@ -125,6 +138,15 @@ function ProjectList({ projects, allTasks = [], onEdit, onDelete, onArchive, onR
                         🗑️
                       </button>
                     </>
+                  )}
+                  {!project.archived && !isOwner && onLeave && (
+                    <button
+                      onClick={() => onLeave(project)}
+                      className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                      title="Leave Project"
+                    >
+                      🚪
+                    </button>
                   )}
                 </div>
               </div>

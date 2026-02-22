@@ -39,6 +39,12 @@ function ProjectDetail() {
   const [shareSuccess, setShareSuccess] = useState('');
   const [shareSearchTerm, setShareSearchTerm] = useState('');
   const [showShareSuggestions, setShowShareSuggestions] = useState(false);
+  const [bulkShareInput, setBulkShareInput] = useState('');
+  const [bulkSharePermissionLevel, setBulkSharePermissionLevel] = useState('editor');
+  const [bulkShareSummary, setBulkShareSummary] = useState(null);
+  const [shareLinkPermissionLevel, setShareLinkPermissionLevel] = useState('viewer');
+  const [shareLinkExpiresAt, setShareLinkExpiresAt] = useState('');
+  const [redeemShareLinkValue, setRedeemShareLinkValue] = useState('');
   const exportMenuRef = useRef(null);
   const globalSearchRef = useRef(null);
   const shareAutocompleteRef = useRef(null);
@@ -62,12 +68,18 @@ function ProjectDetail() {
     queryFn: () => projectsAPI.searchShareCandidates(id, shareSearchTerm),
     enabled: Boolean(project) && shareSearchTerm.length >= 2,
   });
+  const { data: shareLinksData, isLoading: shareLinksLoading } = useQuery({
+    queryKey: ['projectShareLinks', id],
+    queryFn: () => projectsAPI.getShareLinks(id),
+    enabled: Boolean(project),
+  });
 
   // Handle both old format (array) and new format (object with data and pagination)
   // For KanbanBoard, we need all tasks, so we use a large limit
   const tasks = tasksData?.data || tasksData || [];
   const shares = sharesData?.data || [];
   const shareCandidates = shareCandidatesData?.data || [];
+  const shareLinks = shareLinksData?.data || [];
   const isOwner = project?.is_owner !== false;
   const permissionLevel = isOwner ? 'admin' : (project?.permission_level || 'viewer');
   const canManageTasks = isOwner || permissionLevel === 'editor' || permissionLevel === 'admin';
@@ -392,6 +404,82 @@ function ProjectDetail() {
     },
   });
 
+  const leaveProjectMutation = useMutation({
+    mutationFn: () => projectsAPI.leave(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
+      navigate('/dashboard');
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to leave project');
+    },
+  });
+
+  const bulkShareMutation = useMutation({
+    mutationFn: ({ identifiers, permissionLevel }) => projectsAPI.bulkShare(id, identifiers, permissionLevel),
+    onSuccess: (response) => {
+      const summary = response?.data?.summary || null;
+      setBulkShareSummary(summary);
+      setShareError('');
+      setShareSuccess(summary ? `Bulk share complete: ${summary.shared} shared, ${summary.failed} failed.` : 'Bulk share complete.');
+      setBulkShareInput('');
+      queryClient.invalidateQueries({ queryKey: ['projectShares', id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to bulk share');
+    },
+  });
+
+  const createShareLinkMutation = useMutation({
+    mutationFn: ({ permissionLevel, expiresAt }) => projectsAPI.createShareLink(id, {
+      permission_level: permissionLevel,
+      expires_at: expiresAt || null,
+    }),
+    onSuccess: () => {
+      setShareError('');
+      setShareSuccess('Share link created.');
+      queryClient.invalidateQueries({ queryKey: ['projectShareLinks', id] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to create share link');
+    },
+  });
+
+  const revokeShareLinkMutation = useMutation({
+    mutationFn: (linkId) => projectsAPI.revokeShareLink(id, linkId),
+    onSuccess: () => {
+      setShareError('');
+      setShareSuccess('Share link revoked.');
+      queryClient.invalidateQueries({ queryKey: ['projectShareLinks', id] });
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to revoke share link');
+    },
+  });
+
+  const redeemShareLinkMutation = useMutation({
+    mutationFn: (token) => projectsAPI.redeemShareLink(token),
+    onSuccess: (result) => {
+      setShareError('');
+      setShareSuccess('Share link redeemed. Redirecting...');
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      const projectId = result?.project_id;
+      if (projectId) {
+        navigate(`/project/${projectId}`);
+      }
+    },
+    onError: (err) => {
+      setShareSuccess('');
+      setShareError(err?.message || 'Failed to redeem share link');
+    },
+  });
+
   const handleStatusChange = (taskId, newStatus) => {
     setActionError('');
     const task = tasks.find(t => t.id === taskId);
@@ -501,6 +589,85 @@ function ProjectDetail() {
     setShareSuccess('');
   };
 
+  const parseShareIdentifiers = (value) => {
+    return [...new Set(
+      String(value || '')
+        .split(/[\n,;\t]/g)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    )];
+  };
+
+  const parseShareToken = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const match = raw.match(/\/share-links\/([a-f0-9]+)\/redeem/i);
+    if (match?.[1]) return match[1];
+    return raw;
+  };
+
+  const handleBulkShare = () => {
+    const identifiers = parseShareIdentifiers(bulkShareInput);
+    if (identifiers.length === 0) {
+      setShareSuccess('');
+      setShareError('Add at least one username or email for bulk sharing');
+      return;
+    }
+    setBulkShareSummary(null);
+    bulkShareMutation.mutate({
+      identifiers,
+      permissionLevel: bulkSharePermissionLevel
+    });
+  };
+
+  const handleBulkShareCSVImport = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      setBulkShareInput((prev) => `${prev}\n${text}`.trim());
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
+  const handleCreateShareLink = () => {
+    createShareLinkMutation.mutate({
+      permissionLevel: shareLinkPermissionLevel,
+      expiresAt: shareLinkExpiresAt || null
+    });
+  };
+
+  const handleCopyShareLink = async (token) => {
+    const link = `${window.location.origin}/share-links/${token}/redeem`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setShareSuccess('Share link copied.');
+      setShareError('');
+    } catch (error) {
+      setShareError('Failed to copy link');
+      setShareSuccess('');
+    }
+  };
+
+  const handleRedeemShareLink = () => {
+    const token = parseShareToken(redeemShareLinkValue);
+    if (!token) {
+      setShareSuccess('');
+      setShareError('Enter a share token or full share URL');
+      return;
+    }
+    redeemShareLinkMutation.mutate(token);
+  };
+
+  const handleLeaveProject = () => {
+    if (isOwner) return;
+    const confirmed = window.confirm('Leave this shared project? You will lose access immediately.');
+    if (!confirmed) return;
+    leaveProjectMutation.mutate();
+  };
+
   // Keyboard shortcuts
   useKeyboardShortcuts({
     'c': () => {
@@ -599,145 +766,276 @@ function ProjectDetail() {
                   {project.description}
                 </p>
               )}
-              <div className="mt-4 max-w-xl rounded-lg border border-white/10 bg-white/5 p-3">
-                {canManageShares ? (
-                  <>
-                    <p className="text-xs text-gray-400 mb-2">
-                      {isOwner ? 'Share with username or email' : 'Share with username or email (viewer/editor only)'}
-                    </p>
-                    <div className="flex gap-2 mb-2">
-                      <div className="relative flex-1" ref={shareAutocompleteRef}>
-                        <input
-                          value={shareUsername}
-                          onChange={(e) => {
-                            setShareUsername(e.target.value);
-                            setShareError('');
-                            setShareSuccess('');
-                            setShowShareSuggestions(true);
-                          }}
-                          onFocus={() => setShowShareSuggestions(true)}
-                          placeholder="username or email"
-                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                        />
-                        {showShareSuggestions && shareSearchTerm.length >= 2 && (
-                          <div className="absolute z-30 mt-1 w-full rounded-lg border border-white/10 bg-[#252525] shadow-xl overflow-hidden">
-                            {shareCandidatesLoading ? (
-                              <p className="px-3 py-2 text-xs text-gray-500">Searching users...</p>
-                            ) : shareCandidates.length === 0 ? (
-                              <p className="px-3 py-2 text-xs text-gray-500">No matching users</p>
-                            ) : (
-                              shareCandidates.map((candidate) => (
-                                <button
-                                  key={candidate.id}
-                                  type="button"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => handleShareCandidateSelect(candidate)}
-                                  className="w-full px-3 py-2 text-left hover:bg-white/10 transition-colors"
-                                >
-                                  <p className="text-sm text-[#e0e0e0]">{candidate.full_name || candidate.username}</p>
-                                  <p className="text-xs text-gray-500">@{candidate.username}</p>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <select
-                        value={sharePermissionLevel}
-                        onChange={(e) => {
-                          setSharePermissionLevel(e.target.value);
-                          setShareError('');
-                          setShareSuccess('');
-                        }}
-                        className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                      >
-                        <option value="viewer">Viewer</option>
-                        <option value="editor">Editor</option>
-                        {canGrantAdmin && <option value="admin">Admin</option>}
-                      </select>
+              <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  {!isOwner && (
+                    <div className="mb-3">
                       <button
-                        onClick={handleShareProject}
-                        disabled={addShareMutation.isPending}
-                        className="px-3 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        onClick={handleLeaveProject}
+                        disabled={leaveProjectMutation.isPending}
+                        className="px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-300 hover:bg-red-500/30 transition-all disabled:opacity-50"
                       >
-                        {addShareMutation.isPending ? 'Sharing...' : 'Share'}
+                        {leaveProjectMutation.isPending ? 'Leaving...' : 'Leave Project'}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500">
-                      Viewer: Read-only • Editor: Create/Edit tasks • Admin: Full access
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-xs text-gray-400">
-                    {permissionLevel === 'viewer'
-                      ? 'Read-only access: you can view tasks and task details.'
-                      : permissionLevel === 'editor'
-                        ? 'Editor access: you can create, edit, and move tasks.'
-                        : 'Admin access: you can create, edit, move, and delete tasks.'}
-                  </p>
-                )}
-                {shareError && <p className="text-xs text-red-400 mt-2">{shareError}</p>}
-                {shareSuccess && <p className="text-xs text-green-400 mt-2">{shareSuccess}</p>}
-                <div className="mt-3 space-y-1">
-                  <p className="text-xs text-gray-400">Collaborators ({shares.length})</p>
-                  {sharesLoading ? (
-                    <p className="text-xs text-gray-500">Loading...</p>
-                  ) : shares.length === 0 ? (
-                    <p className="text-xs text-gray-500">No collaborators yet.</p>
-                  ) : (
-                    shares.map((share) => {
-                      const targetIsAdmin = share.permission_level === 'admin';
-                      const canEditThisShare = canManageShares && (isOwner || !targetIsAdmin);
-                      const canRemoveThisShare = canManageShares && (isOwner || !targetIsAdmin);
-                      const canTransferToThisShare = isOwner;
-                      return (
-                        <div key={share.user_id} className="flex items-center justify-between text-xs text-gray-300 gap-2">
-                          <div className="flex items-center gap-2">
-                            <span>{share.full_name || share.username}</span>
-                            {canEditThisShare ? (
-                              <select
-                                value={share.permission_level || 'viewer'}
-                                onChange={(e) => handleSharePermissionChange(share, e.target.value)}
-                                disabled={updateSharePermissionMutation.isPending}
-                                className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-300 capitalize focus:outline-none"
-                              >
-                                <option value="viewer">viewer</option>
-                                <option value="editor">editor</option>
-                                {isOwner && <option value="admin">admin</option>}
-                              </select>
-                            ) : (
-                              share.permission_level && (
-                                <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-400 capitalize">
-                                  {share.permission_level}
-                                </span>
-                              )
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {canTransferToThisShare && (
-                              <button
-                                onClick={() => handleTransferOwnership(share)}
-                                disabled={transferOwnershipMutation.isPending}
-                                className="text-blue-300 hover:text-blue-200 disabled:opacity-50"
-                              >
-                                Make owner
-                              </button>
-                            )}
-                            {canRemoveThisShare && (
-                              <button
-                                onClick={() => removeShareMutation.mutate(share.user_id)}
-                                disabled={removeShareMutation.isPending}
-                                className="text-red-400 hover:text-red-300 disabled:opacity-50"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
                   )}
+                  {canManageShares ? (
+                    <>
+                      <p className="text-xs text-gray-400 mb-2">
+                        {isOwner ? 'Share with username or email' : 'Share with username or email (viewer/editor only)'}
+                      </p>
+                      <div className="flex gap-2 mb-2">
+                        <div className="relative flex-1" ref={shareAutocompleteRef}>
+                          <input
+                            value={shareUsername}
+                            onChange={(e) => {
+                              setShareUsername(e.target.value);
+                              setShareError('');
+                              setShareSuccess('');
+                              setShowShareSuggestions(true);
+                            }}
+                            onFocus={() => setShowShareSuggestions(true)}
+                            placeholder="username or email"
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                          {showShareSuggestions && shareSearchTerm.length >= 2 && (
+                            <div className="absolute z-30 mt-1 w-full rounded-lg border border-white/10 bg-[#252525] shadow-xl overflow-hidden">
+                              {shareCandidatesLoading ? (
+                                <p className="px-3 py-2 text-xs text-gray-500">Searching users...</p>
+                              ) : shareCandidates.length === 0 ? (
+                                <p className="px-3 py-2 text-xs text-gray-500">No matching users</p>
+                              ) : (
+                                shareCandidates.map((candidate) => (
+                                  <button
+                                    key={candidate.id}
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => handleShareCandidateSelect(candidate)}
+                                    className="w-full px-3 py-2 text-left hover:bg-white/10 transition-colors"
+                                  >
+                                    <p className="text-sm text-[#e0e0e0]">{candidate.full_name || candidate.username}</p>
+                                    <p className="text-xs text-gray-500">@{candidate.username}</p>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <select
+                          value={sharePermissionLevel}
+                          onChange={(e) => {
+                            setSharePermissionLevel(e.target.value);
+                            setShareError('');
+                            setShareSuccess('');
+                          }}
+                          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                          {canGrantAdmin && <option value="admin">Admin</option>}
+                        </select>
+                        <button
+                          onClick={handleShareProject}
+                          disabled={addShareMutation.isPending}
+                          className="px-3 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        >
+                          {addShareMutation.isPending ? 'Sharing...' : 'Share'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Viewer: Read-only • Editor: Create/Edit tasks • Admin: Full access
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">
+                      {permissionLevel === 'viewer'
+                        ? 'Read-only access: you can view tasks and task details.'
+                        : permissionLevel === 'editor'
+                          ? 'Editor access: you can create, edit, and move tasks.'
+                          : 'Admin access: you can create, edit, move, and delete tasks.'}
+                    </p>
+                  )}
+                  {shareError && <p className="text-xs text-red-400 mt-2">{shareError}</p>}
+                  {shareSuccess && <p className="text-xs text-green-400 mt-2">{shareSuccess}</p>}
+                  {!canManageShares && (
+                    <div className="mt-3 pt-3 border-t border-white/10">
+                      <p className="text-xs text-gray-400 mb-2">Join shared project by link</p>
+                      <div className="flex gap-2">
+                        <input
+                          value={redeemShareLinkValue}
+                          onChange={(e) => setRedeemShareLinkValue(e.target.value)}
+                          placeholder="Paste share URL or token"
+                          className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        />
+                        <button
+                          onClick={handleRedeemShareLink}
+                          disabled={redeemShareLinkMutation.isPending}
+                          className="px-3 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        >
+                          {redeemShareLinkMutation.isPending ? 'Joining...' : 'Join'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <p className="text-xs text-gray-400 mb-2">Collaborators ({shares.length})</p>
+                    {sharesLoading ? (
+                      <p className="text-xs text-gray-500">Loading...</p>
+                    ) : shares.length === 0 ? (
+                      <p className="text-xs text-gray-500">No collaborators yet.</p>
+                    ) : (
+                      <div className="space-y-1 max-h-64 overflow-y-auto">
+                        {shares.map((share) => {
+                          const targetIsAdmin = share.permission_level === 'admin';
+                          const canEditThisShare = canManageShares && (isOwner || !targetIsAdmin);
+                          const canRemoveThisShare = canManageShares && (isOwner || !targetIsAdmin);
+                          const canTransferToThisShare = isOwner;
+                          return (
+                            <div key={share.user_id} className="flex items-center justify-between text-xs text-gray-300 gap-2">
+                              <div className="flex items-center gap-2">
+                                <span>{share.full_name || share.username}</span>
+                                {canEditThisShare ? (
+                                  <select
+                                    value={share.permission_level || 'viewer'}
+                                    onChange={(e) => handleSharePermissionChange(share, e.target.value)}
+                                    disabled={updateSharePermissionMutation.isPending}
+                                    className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-300 capitalize focus:outline-none"
+                                  >
+                                    <option value="viewer">viewer</option>
+                                    <option value="editor">editor</option>
+                                    {isOwner && <option value="admin">admin</option>}
+                                  </select>
+                                ) : (
+                                  share.permission_level && (
+                                    <span className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] text-gray-400 capitalize">
+                                      {share.permission_level}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {canTransferToThisShare && (
+                                  <button
+                                    onClick={() => handleTransferOwnership(share)}
+                                    disabled={transferOwnershipMutation.isPending}
+                                    className="text-blue-300 hover:text-blue-200 disabled:opacity-50"
+                                  >
+                                    Make owner
+                                  </button>
+                                )}
+                                {canRemoveThisShare && (
+                                  <button
+                                    onClick={() => removeShareMutation.mutate(share.user_id)}
+                                    disabled={removeShareMutation.isPending}
+                                    className="text-red-400 hover:text-red-300 disabled:opacity-50"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {canManageShares && (
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-400 mb-2">Bulk share (paste list or import CSV)</p>
+                      <textarea
+                        value={bulkShareInput}
+                        onChange={(e) => setBulkShareInput(e.target.value)}
+                        rows={3}
+                        placeholder="alice,bob@example.com&#10;charlie"
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <select
+                          value={bulkSharePermissionLevel}
+                          onChange={(e) => setBulkSharePermissionLevel(e.target.value)}
+                          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none"
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                          {canGrantAdmin && <option value="admin">Admin</option>}
+                        </select>
+                        <label className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300 cursor-pointer hover:bg-white/10 transition-all">
+                          Import CSV
+                          <input type="file" accept=".csv,.txt" className="hidden" onChange={handleBulkShareCSVImport} />
+                        </label>
+                        <button
+                          onClick={handleBulkShare}
+                          disabled={bulkShareMutation.isPending}
+                          className="px-3 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        >
+                          {bulkShareMutation.isPending ? 'Sharing...' : 'Share All'}
+                        </button>
+                      </div>
+                      {bulkShareSummary && (
+                        <p className="text-xs text-gray-400 mt-2">
+                          Processed {bulkShareSummary.total}: {bulkShareSummary.shared} shared, {bulkShareSummary.failed} failed
+                        </p>
+                      )}
+                    </div>
+                    <div className="pt-3 border-t border-white/10">
+                      <p className="text-xs text-gray-400 mb-2">Share links</p>
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <select
+                          value={shareLinkPermissionLevel}
+                          onChange={(e) => setShareLinkPermissionLevel(e.target.value)}
+                          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none"
+                        >
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                          {canGrantAdmin && <option value="admin">Admin</option>}
+                        </select>
+                        <input
+                          type="datetime-local"
+                          value={shareLinkExpiresAt}
+                          onChange={(e) => setShareLinkExpiresAt(e.target.value)}
+                          className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none"
+                        />
+                        <button
+                          onClick={handleCreateShareLink}
+                          disabled={createShareLinkMutation.isPending}
+                          className="px-3 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        >
+                          {createShareLinkMutation.isPending ? 'Generating...' : 'Generate Link'}
+                        </button>
+                      </div>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {shareLinksLoading ? (
+                          <p className="text-xs text-gray-500">Loading links...</p>
+                        ) : shareLinks.length === 0 ? (
+                          <p className="text-xs text-gray-500">No share links yet.</p>
+                        ) : (
+                          shareLinks.map((link) => (
+                            <div key={link.id} className="flex items-center justify-between gap-2 text-xs text-gray-300">
+                              <span className="truncate">
+                                {link.permission_level} {link.expires_at ? `• expires ${new Date(link.expires_at).toLocaleString()}` : '• no expiry'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => handleCopyShareLink(link.token)} className="text-blue-300 hover:text-blue-200">
+                                  Copy
+                                </button>
+                                {!link.revoked_at && (
+                                  <button
+                                    onClick={() => revokeShareLinkMutation.mutate(link.id)}
+                                    className="text-red-400 hover:text-red-300"
+                                  >
+                                    Revoke
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             {project && (
