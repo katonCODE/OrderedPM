@@ -35,9 +35,6 @@ const validateEnvVariables = () => {
   }
 };
 
-// Run validation before starting the server
-validateEnvVariables();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -94,8 +91,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-app.listen(PORT, () => {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`Server is running on port ${PORT}`);
-  }
-});
+const startServer = () => {
+  validateEnvVariables();
+
+  return app.listen(PORT, () => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Server is running on port ${PORT}`);
+    }
+  });
+};
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };
