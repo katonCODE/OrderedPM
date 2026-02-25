@@ -6,7 +6,7 @@ const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replac
 
 const getAuthHeaders = () => {
   const token = getAccessToken();
-  
+
   return {
     'Content-Type': 'application/json',
     ...(token && { Authorization: `Bearer ${token}` }),
@@ -18,16 +18,16 @@ const fetchWithAuth = async (url, options = {}) => {
     ...getAuthHeaders(),
     ...options.headers,
   };
-  
+
   const response = await fetch(url, {
     ...options,
     headers,
   });
-  
+
   if (!response.ok) {
     const contentType = response.headers.get('content-type');
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-    
+
     try {
       if (contentType && contentType.includes('application/json')) {
         const error = await response.json();
@@ -36,15 +36,15 @@ const fetchWithAuth = async (url, options = {}) => {
     } catch (parseError) {
       // If parsing fails, use the status-based message
     }
-    
+
     throw new Error(errorMessage);
   }
-  
+
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
     return response.json();
   }
-  
+
   return null;
 };
 
@@ -73,11 +73,26 @@ export const getMyProfile = async () => {
     return await fetchWithAuth(`${API_URL}/api/profiles/me`);
   } catch (error) {
     // Handle 404 - profile doesn't exist yet
-    if (error.message.includes('404') || 
-        error.message.includes('Profile not found') || 
-        error.message.includes('Not Found')) {
+    if (error.message.includes('404') ||
+      error.message.includes('Profile not found') ||
+      error.message.includes('Not Found')) {
       return null; // Return null instead of throwing
     }
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the server is running.');
+    }
+    throw error;
+  }
+};
+
+// Create current user's profile
+export const createProfile = async (profileData) => {
+  try {
+    return await fetchWithAuth(`${API_URL}/api/profiles/me`, {
+      method: 'POST',
+      body: JSON.stringify(profileData),
+    });
+  } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Unable to connect to server. Please check if the server is running.');
     }

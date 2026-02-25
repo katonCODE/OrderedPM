@@ -1,12 +1,15 @@
 // client/src/components/Login.js
 import React, { useState } from 'react';
 import { authService } from '../services/auth';
+import { createProfile } from '../services/profile';
 import Navigation from './Navigation';
 
 function Login({ onLogin }) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,15 +22,72 @@ function Login({ onLogin }) {
 
     try {
       if (isSignUp) {
+        if (password !== confirmPassword) {
+          setError('Passwords do not match');
+          setLoading(false);
+          return;
+        }
+        if (!username || !username.trim()) {
+          setError('Username is required');
+          setLoading(false);
+          return;
+        }
+        const trimmedUsername = username.trim();
+        if (trimmedUsername.length < 3) {
+          setError('Username must be at least 3 characters long');
+          setLoading(false);
+          return;
+        }
+        if (trimmedUsername.length > 30) {
+          setError('Username must be 30 characters or less');
+          setLoading(false);
+          return;
+        }
         const data = await authService.signUp(email, password);
         setError('');
         if (data.session) {
+          try {
+            await createProfile({ username: trimmedUsername });
+            localStorage.removeItem('pendingUsername');
+            localStorage.removeItem('pendingEmail');
+          } catch (profileError) {
+            console.error('Error creating profile:', profileError);
+            const errorMsg = profileError.message || '';
+            if (errorMsg.includes('Username already taken') || errorMsg.includes('already taken')) {
+              setError('Username is already taken. Please choose a different username.');
+            } else if (errorMsg.includes('Profile already exists')) {
+              setError('Profile already exists. Please sign in instead.');
+            } else {
+              setError(errorMsg || 'Account created but profile setup failed. Please try signing in.');
+            }
+            setLoading(false);
+            return;
+          }
           onLogin();
         } else {
-          setSuccess('Account created! Please check your email to confirm your account.');
+          localStorage.setItem('pendingUsername', trimmedUsername);
+          localStorage.setItem('pendingEmail', email);
+          setSuccess('Account created! Please check your email to confirm your account. Your profile will be created automatically after you confirm your email.');
         }
       } else {
         await authService.signIn(email, password);
+        const pendingUsername = localStorage.getItem('pendingUsername');
+        if (pendingUsername) {
+          try {
+            await createProfile({ username: pendingUsername });
+            localStorage.removeItem('pendingUsername');
+            localStorage.removeItem('pendingEmail');
+          } catch (profileError) {
+            console.error('Error creating profile after email confirmation:', profileError);
+            const errorMsg = profileError.message || '';
+            if (!errorMsg.includes('Profile already exists')) {
+              console.warn('Profile creation failed after email confirmation:', errorMsg);
+            } else {
+              localStorage.removeItem('pendingUsername');
+              localStorage.removeItem('pendingEmail');
+            }
+          }
+        }
         onLogin();
       }
     } catch (err) {
@@ -70,13 +130,30 @@ function Login({ onLogin }) {
                 </span>
               </h1>
               <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 text-[#e0e0e0]">
-                {isSignUp ? 'Sign Up' : 'Sign In'}
+                {isSignUp ? 'Create Your Account' : 'Sign In'}
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {isSignUp && (
+                  <div>
+                    <label htmlFor="username" className="block text-sm font-medium text-gray-400 mb-2">
+                      Username *
+                    </label>
+                    <input
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      required
+                      placeholder="Enter your username"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-400 mb-2">
-                    Email
+                    Email {isSignUp && '*'}
                   </label>
                   <input
                     id="email"
@@ -84,14 +161,14 @@ function Login({ onLogin }) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    placeholder="your@email.com"
+                    placeholder={isSignUp ? "Enter your email address" : "your@email.com"}
                     className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                   />
                 </div>
 
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-gray-400 mb-2">
-                    Password
+                    Password {isSignUp && '*'}
                   </label>
                   <input
                     id="password"
@@ -99,11 +176,29 @@ function Login({ onLogin }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    placeholder="••••••••"
+                    placeholder={isSignUp ? "Enter your password (min. 6 characters)" : "Enter your password"}
                     minLength={6}
                     className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                   />
                 </div>
+
+                {isSignUp && (
+                  <div>
+                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-400 mb-2">
+                      Confirm Password *
+                    </label>
+                    <input
+                      id="confirmPassword"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      placeholder="Re-enter your password to confirm"
+                      minLength={6}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                    />
+                  </div>
+                )}
 
                 {success && (
                   <div className="px-4 py-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
@@ -133,6 +228,8 @@ function Login({ onLogin }) {
                     setIsSignUp(!isSignUp);
                     setError('');
                     setSuccess('');
+                    setUsername('');
+                    setConfirmPassword('');
                   }}
                   className="text-blue-400 hover:text-blue-300 underline font-medium"
                 >

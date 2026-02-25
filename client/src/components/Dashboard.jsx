@@ -212,6 +212,15 @@ function Dashboard({ onLogout }) {
       .sort((a, b) => String(a.due_date).slice(0, 10).localeCompare(String(b.due_date).slice(0, 10)))
       .slice(0, 5);
   }, [allTasks, activeProjectsForQuickAdd, todayString]);
+
+  const hasCompletableTasks = useMemo(() => {
+    const activeProjectIds = new Set(activeProjectsForQuickAdd.map(project => project.id));
+    return allTasks.some(task =>
+      !task.parent_task_id &&
+      task.status !== 'done' &&
+      activeProjectIds.has(task.project_id)
+    );
+  }, [allTasks, activeProjectsForQuickAdd]);
   const toggleTodayPin = (taskId) => {
     setTodayPlanPinnedTaskIds((prev) =>
       prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
@@ -262,6 +271,12 @@ function Dashboard({ onLogout }) {
       setCurrentPage(1);
     }
   }, [totalPages, currentPage]);
+
+  useEffect(() => {
+    if (activeTab === 'today' && !hasCompletableTasks) {
+      setActiveTab('projects');
+    }
+  }, [activeTab, hasCompletableTasks]);
 
   const handleCreateProject = async (projectData) => {
     try {
@@ -616,11 +631,17 @@ function Dashboard({ onLogout }) {
                 Upcoming Tasks
               </button>
               <button
-                onClick={() => setActiveTab('today')}
+                onClick={() => {
+                  if (hasCompletableTasks) {
+                    setActiveTab('today');
+                  }
+                }}
+                disabled={!hasCompletableTasks}
                 className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'today'
                   ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
-                  }`}
+                  } ${!hasCompletableTasks ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={!hasCompletableTasks ? 'No tasks available to plan. Create tasks in active projects first.' : ''}
               >
                 Auto-Plan
               </button>
@@ -978,6 +999,11 @@ function Dashboard({ onLogout }) {
                   <h3 className="text-xl font-semibold text-[#e0e0e0]">Build Today's plan</h3>
                   <span className="text-xs text-gray-500">Across all active projects</span>
                 </div>
+                {!hasCompletableTasks && (
+                  <div className="mb-4 px-4 py-3 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm">
+                    No tasks available to plan. Create tasks in active projects first.
+                  </div>
+                )}
                 <div className="flex flex-col md:flex-row gap-3 mb-5">
                   <div className="w-full md:w-72">
                     <label className="block text-xs text-gray-400 mb-1">Daily time budget (minutes)</label>

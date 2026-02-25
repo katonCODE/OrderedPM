@@ -896,43 +896,89 @@ router.post('/ai/generate', authenticateToken, aiRateLimiter, async (req, res) =
     // Check if GEMINI_API_KEY exists
     if (!process.env.GEMINI_API_KEY) {
       console.error('GEMINI_API_KEY is not configured');
-      return res.status(500).json({ error: 'AI service is not configured' });
+      return res.status(500).json({ error: 'AI service is not configured. Please check server configuration.' });
+    }
+
+    // Validate API key format (should start with AIza)
+    const apiKey = process.env.GEMINI_API_KEY.trim();
+    if (!apiKey.startsWith('AIza')) {
+      console.error('GEMINI_API_KEY appears to be invalid (should start with AIza)');
+      return res.status(500).json({ error: 'Invalid Gemini API key format. Please check your API key.' });
     }
 
     // Initialize Google Generative AI
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    let genAI;
+    let model;
+    try {
+      genAI = new GoogleGenerativeAI(apiKey);
+      // Try gemini-2.5-flash, with fallback to gemini-1.5-flash if not available
+      try {
+        model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      } catch (modelError) {
+        console.warn('gemini-2.5-flash not available, trying gemini-1.5-flash:', modelError.message);
+        model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      }
+    } catch (initError) {
+      console.error('Failed to initialize Gemini API:', initError.message);
+      return res.status(500).json({ error: `Failed to initialize AI service: ${initError.message}` });
+    }
 
     // Create prompt for Gemini
     const aiPrompt = `Based on the following user request, generate a task with a title, description, and priority level.
 
 User request: "${prompt.trim()}"
 
-Please respond with ONLY a valid JSON object in this exact format (no markdown, no code blocks, just the JSON):
+You MUST respond with ONLY a valid JSON object containing exactly these three fields:
 {
   "title": "A clear and concise task title",
   "description": "A detailed description of the task",
   "priority": "low" | "medium" | "high"
 }
 
-The priority should be:
+Priority rules:
 - "low" for non-urgent tasks
 - "medium" for normal tasks
 - "high" for urgent or important tasks
 
-Return only the JSON object, nothing else.`;
+Return ONLY the JSON object, no markdown, no code blocks, no additional fields.`;
 
     // Generate content
-    const result = await model.generateContent(aiPrompt);
-    const response = await result.response;
-    let text = response.text();
+    let result;
+    let response;
+    let text;
+    try {
+      result = await model.generateContent(aiPrompt);
+      response = await result.response;
+      text = response.text();
+    } catch (apiError) {
+      console.error('Gemini API error:', apiError.message);
+      console.error('API error details:', JSON.stringify(apiError, null, 2));
 
-    // Remove markdown code block wrappers if present
+      // Check for specific error types
+      if (apiError.message?.includes('API_KEY_INVALID') || apiError.message?.includes('invalid API key')) {
+        return res.status(500).json({ error: 'Invalid Gemini API key. Please check your API key configuration.' });
+      }
+      if (apiError.message?.includes('PERMISSION_DENIED') || apiError.message?.includes('permission')) {
+        return res.status(500).json({ error: 'API key does not have required permissions. Please check your API key settings.' });
+      }
+      if (apiError.message?.includes('QUOTA') || apiError.message?.includes('quota')) {
+        return res.status(500).json({ error: 'API quota exceeded. Please check your Gemini API usage limits.' });
+      }
+
+      return res.status(500).json({ error: `AI service error: ${apiError.message || 'Unknown error'}` });
+    }
+
+    // Clean up response text (remove markdown code blocks if present)
     text = text.trim();
     if (text.startsWith('```json')) {
       text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     } else if (text.startsWith('```')) {
       text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+    }
+    // Extract JSON object if there's extra text
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
     }
     text = text.trim();
 
@@ -941,21 +987,23 @@ Return only the JSON object, nothing else.`;
     try {
       taskData = JSON.parse(text);
     } catch (parseError) {
-      console.error('Failed to parse AI response:', text);
+      console.error('Failed to parse AI response. Raw text:', text.substring(0, 500));
+      console.error('Parse error:', parseError.message);
       return res.status(500).json({ error: 'Failed to parse AI response. Please try again.' });
     }
 
     // Validate required fields
     if (!taskData.title || typeof taskData.title !== 'string') {
+      console.error('AI response missing valid title. Response:', JSON.stringify(taskData));
       return res.status(500).json({ error: 'AI response missing valid title' });
     }
 
-    // Validate and normalize priority
+    // Validate and normalize priority (should already be valid due to schema, but double-check)
     const validPriorities = ['low', 'medium', 'high'];
-    if (!taskData.priority || !validPriorities.includes(taskData.priority.toLowerCase())) {
+    if (!taskData.priority || !validPriorities.includes(String(taskData.priority).toLowerCase())) {
       taskData.priority = 'medium';
     } else {
-      taskData.priority = taskData.priority.toLowerCase();
+      taskData.priority = String(taskData.priority).toLowerCase();
     }
 
     // Ensure description exists (can be empty string)
@@ -965,14 +1013,24 @@ Return only the JSON object, nothing else.`;
 
     // Return the parsed task data
     res.json({
-      title: taskData.title.trim(),
-      description: taskData.description.trim() || null,
+      title: String(taskData.title).trim(),
+      description: String(taskData.description).trim() || null,
       priority: taskData.priority,
       project_id: project_id || null
     });
   } catch (error) {
-    console.error('Error generating task with AI:', error);
-    res.status(500).json({ error: 'Failed to generate task. Please try again.' });
+    console.error('Unexpected error generating task with AI:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+
+    // Provide more specific error messages
+    let errorMessage = 'Failed to generate task. Please try again.';
+    if (error.message) {
+      errorMessage = error.message;
+    }
+
+    res.status(500).json({ error: errorMessage });
   }
 });
 

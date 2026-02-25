@@ -1,52 +1,111 @@
 // server/middleware/rateLimit.js
 const rateLimit = require('express-rate-limit');
-const { Redis } = require('@upstash/redis');
+const pool = require('../db/connection');
 
-// Initialize Redis client if credentials are provided
-let redisClient = null;
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  redisClient = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  });
-}
-
-// Custom Redis store for express-rate-limit
-class UpstashRedisStore {
-  constructor(client) {
-    this.client = client;
+// PostgreSQL store for express-rate-limit
+class PostgresStore {
+  constructor() {
+    this.pool = pool;
   }
 
   async increment(key) {
-    const count = await this.client.incr(key);
-    const ttl = await this.client.ttl(key);
-    if (ttl === -1) {
-      // Set expiration if key doesn't have one (5 minutes)
-      await this.client.expire(key, 300);
+    const client = await this.pool.connect();
+    try {
+      const windowMs = 5 * 60 * 1000; // 5 minutes
+      const now = new Date();
+      const resetTime = new Date(now.getTime() + windowMs);
+
+      // Try to get existing record
+      const result = await client.query(
+        'SELECT hits, reset_time FROM rate_limits WHERE key = $1',
+        [key]
+      );
+
+      if (result.rows.length > 0) {
+        const row = result.rows[0];
+        const resetTimeDate = new Date(row.reset_time);
+
+        // If reset time has passed, reset the counter
+        if (resetTimeDate <= now) {
+          await client.query(
+            'UPDATE rate_limits SET hits = 1, reset_time = $1 WHERE key = $2',
+            [resetTime, key]
+          );
+          return {
+            totalHits: 1,
+            resetTime: resetTime,
+          };
+        } else {
+          // Increment existing counter
+          const newHits = parseInt(row.hits) + 1;
+          await client.query(
+            'UPDATE rate_limits SET hits = $1 WHERE key = $2',
+            [newHits, key]
+          );
+          return {
+            totalHits: newHits,
+            resetTime: resetTimeDate,
+          };
+        }
+      } else {
+        // Create new record
+        await client.query(
+          'INSERT INTO rate_limits (key, hits, reset_time) VALUES ($1, 1, $2)',
+          [key, resetTime]
+        );
+        return {
+          totalHits: 1,
+          resetTime: resetTime,
+        };
+      }
+    } catch (error) {
+      console.error('PostgreSQL rate limit error:', error.message);
+      // On error, allow the request (fail open)
+      return {
+        totalHits: 1,
+        resetTime: new Date(Date.now() + 5 * 60 * 1000),
+      };
+    } finally {
+      client.release();
     }
-    return {
-      totalHits: count,
-      resetTime: new Date(Date.now() + (ttl > 0 ? ttl * 1000 : 300 * 1000)),
-    };
   }
 
   async decrement(key) {
-    await this.client.decr(key);
+    const client = await this.pool.connect();
+    try {
+      await client.query(
+        'UPDATE rate_limits SET hits = GREATEST(hits - 1, 0) WHERE key = $1',
+        [key]
+      );
+    } catch (error) {
+      console.error('PostgreSQL rate limit decrement error:', error.message);
+      // Ignore decrement errors
+    } finally {
+      client.release();
+    }
   }
 
   async resetKey(key) {
-    await this.client.del(key);
+    const client = await this.pool.connect();
+    try {
+      await client.query('DELETE FROM rate_limits WHERE key = $1', [key]);
+    } catch (error) {
+      console.error('PostgreSQL rate limit reset error:', error.message);
+      // Ignore reset errors
+    } finally {
+      client.release();
+    }
   }
 
   async shutdown() {
-    // Upstash REST API doesn't need connection cleanup
+    // PostgreSQL pool handles its own cleanup
   }
 }
 
 // Create rate limiter for AI endpoints
 // Limits: 5 requests per 5 minutes per user
 const createAIRateLimiter = () => {
-  const store = redisClient ? new UpstashRedisStore(redisClient) : undefined;
+  const store = new PostgresStore();
 
   return rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes
@@ -62,10 +121,8 @@ const createAIRateLimiter = () => {
       // Use user ID from authenticated request
       return `ai_rate_limit:${req.userId || req.ip}`;
     },
-    skip: (req) => {
-      // Skip rate limiting if Redis is not configured (fallback to no limit)
-      // In production, you might want to return false here to enforce limits
-      return !redisClient;
+    handler: (req, res, next, options) => {
+      res.status(options.statusCode).json(options.message);
     },
   });
 };

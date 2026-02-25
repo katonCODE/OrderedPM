@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { authService } from './services/auth';
 import { getAccessToken } from './utils/token';
+import { createProfile, getMyProfile } from './services/profile';
 import { User } from './types/schema';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -46,6 +47,36 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const createPendingProfile = async () => {
+      if (!user || !emailConfirmed) return;
+
+      const pendingUsername = localStorage.getItem('pendingUsername');
+      if (!pendingUsername) return;
+
+      try {
+        const existingProfile = await getMyProfile();
+        if (!existingProfile) {
+          await createProfile({ username: pendingUsername });
+          localStorage.removeItem('pendingUsername');
+          localStorage.removeItem('pendingEmail');
+        } else {
+          localStorage.removeItem('pendingUsername');
+          localStorage.removeItem('pendingEmail');
+        }
+      } catch (error) {
+        console.error('Error creating pending profile:', error);
+        const errorMsg = error instanceof Error ? error.message : '';
+        if (errorMsg.includes('Profile already exists')) {
+          localStorage.removeItem('pendingUsername');
+          localStorage.removeItem('pendingEmail');
+        }
+      }
+    };
+
+    createPendingProfile();
+  }, [user, emailConfirmed]);
 
   const checkAuth = async () => {
     try {
