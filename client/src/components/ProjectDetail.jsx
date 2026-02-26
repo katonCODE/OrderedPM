@@ -222,8 +222,15 @@ function ProjectDetail() {
       });
     },
     onMutate: async ({ taskId, newStatus }) => {
+      // Cancel all related queries to prevent race conditions
       await queryClient.cancelQueries({ queryKey: ['tasks', id] });
+      await queryClient.cancelQueries({ queryKey: ['task', taskId] });
+      await queryClient.cancelQueries({ queryKey: ['task-activities', taskId] });
+
+      // Get previous data for rollback
       const previousTasks = queryClient.getQueryData(['tasks', id]);
+      const previousTask = queryClient.getQueryData(['task', taskId]);
+      const previousActivities = queryClient.getQueryData(['task-activities', taskId]);
 
       // Handle both array and paginated object formats
       const tasksArray = Array.isArray(previousTasks)
@@ -233,11 +240,11 @@ function ProjectDetail() {
       const task = tasksArray.find(t => t.id === taskId);
 
       if (task) {
+        // Update tasks list optimistically
         queryClient.setQueryData(['tasks', id], (old) => {
           const oldArray = Array.isArray(old) ? old : old?.data || [];
           const updatedArray = oldArray.map(t => t.id === taskId ? { ...t, status: newStatus } : t);
 
-          // Return in same format as received
           if (Array.isArray(old)) {
             return updatedArray;
           } else if (old && typeof old === 'object' && 'data' in old) {
@@ -247,16 +254,79 @@ function ProjectDetail() {
         });
       }
 
-      return { previousTasks };
+      // Update individual task query optimistically
+      if (previousTask) {
+        queryClient.setQueryData(['task', taskId], (old) => {
+          if (!old) return old;
+          return { ...old, status: newStatus };
+        });
+      }
+
+      // Add optimistic activity feed entry
+      if (previousTask && previousTask.status !== newStatus) {
+        const activitiesArray = Array.isArray(previousActivities) ? previousActivities : previousActivities?.data || [];
+        const optimisticActivity = {
+          id: `temp-${Date.now()}`,
+          task_id: taskId,
+          user_id: null,
+          activity_type: 'status_changed',
+          old_value: previousTask.status,
+          new_value: newStatus,
+          created_at: new Date().toISOString(),
+          user_username: null,
+          user_full_name: null,
+          user_avatar_url: null,
+        };
+        queryClient.setQueryData(['task-activities', taskId], (old) => {
+          const oldArray = Array.isArray(old) ? old : old?.data || [];
+          const updatedArray = [optimisticActivity, ...oldArray];
+          if (Array.isArray(old)) {
+            return updatedArray;
+          } else if (old && typeof old === 'object' && 'data' in old) {
+            return { ...old, data: updatedArray };
+          }
+          return updatedArray;
+        });
+      }
+
+      return { previousTasks, previousTask, previousActivities };
+    },
+    onSuccess: (updatedTaskData, variables) => {
+      // Update cache with server response instead of refetching
+      queryClient.setQueryData(['tasks', id], (old) => {
+        const oldArray = Array.isArray(old) ? old : old?.data || [];
+        const updatedArray = oldArray.map(t =>
+          t.id === variables.taskId ? { ...t, ...updatedTaskData } : t
+        );
+        if (Array.isArray(old)) {
+          return updatedArray;
+        } else if (old && typeof old === 'object' && 'data' in old) {
+          return { ...old, data: updatedArray };
+        }
+        return updatedArray;
+      });
+
+      // Update individual task query with server response
+      queryClient.setQueryData(['task', variables.taskId], (old) => {
+        if (!old) return old;
+        return { ...old, ...updatedTaskData };
+      });
+
+      // Invalidate activity feed to get fresh data (server creates activity entry)
+      queryClient.invalidateQueries({ queryKey: ['task-activities', variables.taskId] });
     },
     onError: (err, variables, context) => {
+      // Rollback all optimistic updates
       if (context?.previousTasks) {
         queryClient.setQueryData(['tasks', id], context.previousTasks);
       }
+      if (context?.previousTask) {
+        queryClient.setQueryData(['task', variables.taskId], context.previousTask);
+      }
+      if (context?.previousActivities) {
+        queryClient.setQueryData(['task-activities', variables.taskId], context.previousActivities);
+      }
       setActionError(err?.message || 'Failed to update task status');
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
     },
   });
 
@@ -283,8 +353,15 @@ function ProjectDetail() {
       });
     },
     onMutate: async ({ taskId, prevPosition, nextPosition, status }) => {
+      // Cancel all related queries to prevent race conditions
       await queryClient.cancelQueries({ queryKey: ['tasks', id] });
+      await queryClient.cancelQueries({ queryKey: ['task', taskId] });
+      await queryClient.cancelQueries({ queryKey: ['task-activities', taskId] });
+
+      // Get previous data for rollback
       const previousTasks = queryClient.getQueryData(['tasks', id]);
+      const previousTask = queryClient.getQueryData(['task', taskId]);
+      const previousActivities = queryClient.getQueryData(['task-activities', taskId]);
 
       // Calculate new position optimistically
       let newPosition;
@@ -298,13 +375,14 @@ function ProjectDetail() {
         newPosition = (prevPosition + nextPosition) / 2;
       }
 
+      const updatedStatus = status !== undefined ? status : (previousTask?.status || tasks.find(t => t.id === taskId)?.status);
+
+      // Update tasks list optimistically
       queryClient.setQueryData(['tasks', id], (old) => {
-        // Handle both array and paginated object formats
         const oldArray = Array.isArray(old) ? old : old?.data || [];
         const updatedArray = oldArray.map(t => {
           if (t.id === taskId) {
             const updated = { ...t, position: newPosition };
-            // Always update status if provided (for cross-column moves)
             if (status !== undefined) {
               updated.status = status;
             }
@@ -313,7 +391,6 @@ function ProjectDetail() {
           return t;
         });
 
-        // Return in same format as received
         if (Array.isArray(old)) {
           return updatedArray;
         } else if (old && typeof old === 'object' && 'data' in old) {
@@ -322,12 +399,82 @@ function ProjectDetail() {
         return updatedArray;
       });
 
-      return { previousTasks };
+      // Update individual task query optimistically
+      if (previousTask) {
+        queryClient.setQueryData(['task', taskId], (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            position: newPosition,
+            ...(status !== undefined && { status }),
+          };
+        });
+      }
+
+      // Add optimistic activity feed entry if status changed
+      if (status !== undefined && previousTask && previousTask.status !== status) {
+        const activitiesArray = Array.isArray(previousActivities) ? previousActivities : previousActivities?.data || [];
+        const optimisticActivity = {
+          id: `temp-${Date.now()}`,
+          task_id: taskId,
+          user_id: null,
+          activity_type: 'status_changed',
+          old_value: previousTask.status,
+          new_value: status,
+          created_at: new Date().toISOString(),
+          user_username: null,
+          user_full_name: null,
+          user_avatar_url: null,
+        };
+        queryClient.setQueryData(['task-activities', taskId], (old) => {
+          const oldArray = Array.isArray(old) ? old : old?.data || [];
+          const updatedArray = [optimisticActivity, ...oldArray];
+          if (Array.isArray(old)) {
+            return updatedArray;
+          } else if (old && typeof old === 'object' && 'data' in old) {
+            return { ...old, data: updatedArray };
+          }
+          return updatedArray;
+        });
+      }
+
+      return { previousTasks, previousTask, previousActivities };
+    },
+    onSuccess: (updatedTaskData, variables) => {
+      // Update cache with server response instead of refetching
+      queryClient.setQueryData(['tasks', id], (old) => {
+        const oldArray = Array.isArray(old) ? old : old?.data || [];
+        const updatedArray = oldArray.map(t =>
+          t.id === variables.taskId ? { ...t, ...updatedTaskData } : t
+        );
+        if (Array.isArray(old)) {
+          return updatedArray;
+        } else if (old && typeof old === 'object' && 'data' in old) {
+          return { ...old, data: updatedArray };
+        }
+        return updatedArray;
+      });
+
+      // Update individual task query with server response
+      queryClient.setQueryData(['task', variables.taskId], (old) => {
+        if (!old) return old;
+        return { ...old, ...updatedTaskData };
+      });
+
+      // Invalidate activity feed to get fresh data (server creates activity entry)
+      queryClient.invalidateQueries({ queryKey: ['task-activities', variables.taskId] });
     },
     onError: (err, variables, context) => {
       console.error('Position update error:', err);
+      // Rollback all optimistic updates
       if (context?.previousTasks) {
         queryClient.setQueryData(['tasks', id], context.previousTasks);
+      }
+      if (context?.previousTask) {
+        queryClient.setQueryData(['task', variables.taskId], context.previousTask);
+      }
+      if (context?.previousActivities) {
+        queryClient.setQueryData(['task-activities', variables.taskId], context.previousActivities);
       }
       setActionError(err?.message || 'Failed to move task');
       // If status was being updated and position update failed, try status update as fallback
@@ -337,9 +484,6 @@ function ProjectDetail() {
           statusUpdateMutation.mutate({ taskId: variables.taskId, newStatus: variables.status, task });
         }
       }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
     },
   });
 

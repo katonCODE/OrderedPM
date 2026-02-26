@@ -651,5 +651,89 @@ export const tasksAPI = {
       throw error;
     }
   },
+
+  getActivities: async (taskId, options = {}) => {
+    try {
+      const { limit = 50, offset = 0 } = options;
+      const params = new URLSearchParams();
+      if (limit !== undefined) params.append('limit', limit.toString());
+      if (offset !== undefined) params.append('offset', offset.toString());
+      const url = `${API_URL}/api/tasks/${taskId}/activities${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  getComments: async (taskId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/comments`);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  createComment: async (taskId, { content, parent_comment_id = null }) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content, parent_comment_id }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  updateComment: async (taskId, commentId, { content }) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/comments/${commentId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ content }),
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  deleteComment: async (taskId, commentId) => {
+    try {
+      return await fetchWithAuth(`${API_URL}/api/tasks/${taskId}/comments/${commentId}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
+
+  searchMentionCandidates: async (taskId, query) => {
+    try {
+      const params = new URLSearchParams();
+      if (query && typeof query === 'string') {
+        params.append('q', query.trim());
+      }
+      const url = `${API_URL}/api/tasks/${taskId}/mention-candidates${params.toString() ? `?${params.toString()}` : ''}`;
+      return await fetchWithAuth(url);
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Unable to connect to server. Please check if the server is running.');
+      }
+      throw error;
+    }
+  },
 };
 

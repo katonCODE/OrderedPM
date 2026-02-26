@@ -87,3 +87,70 @@ export type UpdateTaskInput = Partial<Omit<Task, 'id' | 'project_id' | 'user_id'
   parent_task_id?: string | null;
 };
 
+// Activity types
+export enum TaskActivityType {
+  CREATED = 'created',
+  UPDATED = 'updated',
+  DELETED = 'deleted',
+  STATUS_CHANGED = 'status_changed',
+  DUE_DATE_CHANGED = 'due_date_changed',
+  START_DATE_CHANGED = 'start_date_changed',
+  PRIORITY_CHANGED = 'priority_changed',
+  TITLE_CHANGED = 'title_changed',
+  DESCRIPTION_CHANGED = 'description_changed',
+  ASSIGNED = 'assigned',
+  UNASSIGNED = 'unassigned',
+  SHARED = 'shared',
+  UNSHARED = 'unshared',
+  DEPENDENCY_ADDED = 'dependency_added',
+  DEPENDENCY_REMOVED = 'dependency_removed',
+  TAG_ADDED = 'tag_added',
+  TAG_REMOVED = 'tag_removed',
+}
+
+export interface TaskActivity {
+  id: string; // UUID
+  task_id: string; // UUID
+  user_id: string; // UUID
+  activity_type: TaskActivityType;
+  old_value: string | null;
+  new_value: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string; // ISO timestamp string
+  user_username?: string | null;
+  user_full_name?: string | null;
+  user_avatar_url?: string | null;
+}
+
+// Comment types
+export interface CommentMention {
+  id: string; // UUID
+  mentioned_user_id: string; // UUID
+  mentioned_username?: string | null;
+  mentioned_full_name?: string | null;
+  mentioned_avatar_url?: string | null;
+}
+
+export interface TaskComment {
+  id: string; // UUID
+  task_id: string; // UUID
+  user_id: string; // UUID
+  parent_comment_id: string | null; // UUID reference to parent comment (null for top-level comments)
+  content: string;
+  created_at: string; // ISO timestamp string
+  updated_at: string; // ISO timestamp string
+  user_username?: string | null;
+  user_full_name?: string | null;
+  user_avatar_url?: string | null;
+  mentions?: CommentMention[] | null;
+}
+
+export type CreateCommentInput = {
+  content: string;
+  parent_comment_id?: string | null;
+};
+
+export type UpdateCommentInput = {
+  content: string;
+};
+

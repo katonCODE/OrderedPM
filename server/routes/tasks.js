@@ -140,6 +140,18 @@ const canDeleteTask = (access) => {
   return access.isOwner || access.permissionLevel === 'admin';
 };
 
+const logTaskActivity = async (taskId, userId, activityType, oldValue = null, newValue = null, metadata = {}) => {
+  try {
+    await pool.query(
+      `INSERT INTO task_activities (task_id, user_id, activity_type, old_value, new_value, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [taskId, userId, activityType, oldValue, newValue, JSON.stringify(metadata)]
+    );
+  } catch (error) {
+    console.error('Error logging task activity:', error);
+  }
+};
+
 const getAccessibleTask = async (taskId, userId) => {
   const result = await pool.query(
     `SELECT t.*
@@ -835,6 +847,8 @@ router.post('/:id/dependencies', authenticateToken, async (req, res) => {
       [req.params.id, blocker_task_id]
     );
 
+    await logTaskActivity(req.params.id, req.userId, 'dependency_added', null, blocker_task_id, { blocker_task_title: blockerRow.title });
+
     const dependencies = await getTaskDependencies(req.params.id, req.userId);
     res.status(201).json(dependencies);
   } catch (error) {
@@ -867,10 +881,349 @@ router.delete('/:id/dependencies/:blockerId', authenticateToken, async (req, res
       [req.params.id, req.params.blockerId]
     );
 
+    await logTaskActivity(req.params.id, req.userId, 'dependency_removed', req.params.blockerId, null, { blocker_task_title: blocker.title });
+
     const dependencies = await getTaskDependencies(req.params.id, req.userId);
     res.json(dependencies);
   } catch (error) {
     console.error('Error removing task dependency:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Search users for mentions in task comments
+router.get('/:id/mention-candidates', authenticateToken, async (req, res) => {
+  try {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const q = String(req.query?.q || '').trim();
+    // Allow empty query to show all available users when just @ is typed
+
+    const likeQuery = q.length > 0 ? `%${q}%` : '%';
+    const startsWithQuery = q.length > 0 ? `${q}%` : '%';
+
+    const result = await pool.query(
+      `SELECT DISTINCT p.id, p.username, p.full_name, p.avatar_url,
+              CASE WHEN p.username ILIKE $4 THEN 1 ELSE 2 END AS sort_order
+       FROM profiles p
+       JOIN tasks t ON t.id = $1
+       JOIN projects proj ON proj.id = t.project_id
+       LEFT JOIN project_shares ps
+         ON ps.project_id = proj.id
+        AND ps.shared_with_user_id = p.id
+       WHERE p.id != $2
+         AND (
+           $3 = '%'
+           OR p.username ILIKE $3
+           OR COALESCE(p.full_name, '') ILIKE $3
+         )
+         AND (
+           proj.user_id = p.id
+           OR ps.shared_with_user_id IS NOT NULL
+         )
+       ORDER BY sort_order, p.username ASC
+       LIMIT 10`,
+      [req.params.id, req.userId, likeQuery, startsWithQuery]
+    );
+
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error searching mention candidates:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get activity feed for a task
+router.get('/:id/activities', authenticateToken, async (req, res) => {
+  try {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), 100);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const result = await pool.query(
+      `SELECT 
+        ta.*,
+        p.username AS user_username,
+        p.full_name AS user_full_name,
+        p.avatar_url AS user_avatar_url
+       FROM task_activities ta
+       LEFT JOIN profiles p ON p.id = ta.user_id
+       WHERE ta.task_id = $1
+       ORDER BY ta.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [req.params.id, limit, offset]
+    );
+
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error fetching task activities:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get comments for a task
+router.get('/:id/comments', authenticateToken, async (req, res) => {
+  try {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const result = await pool.query(
+      `SELECT 
+        tc.*,
+        p.username AS user_username,
+        p.full_name AS user_full_name,
+        p.avatar_url AS user_avatar_url,
+        (
+          SELECT json_agg(json_build_object(
+            'id', cm.id,
+            'mentioned_user_id', cm.mentioned_user_id,
+            'mentioned_username', mp.username,
+            'mentioned_full_name', mp.full_name,
+            'mentioned_avatar_url', mp.avatar_url
+          ))
+          FROM comment_mentions cm
+          LEFT JOIN profiles mp ON mp.id = cm.mentioned_user_id
+          WHERE cm.comment_id = tc.id
+        ) AS mentions
+       FROM task_comments tc
+       LEFT JOIN profiles p ON p.id = tc.user_id
+       WHERE tc.task_id = $1
+       ORDER BY tc.created_at ASC`,
+      [req.params.id]
+    );
+
+    res.json({ data: result.rows });
+  } catch (error) {
+    console.error('Error fetching task comments:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create a comment on a task
+router.post('/:id/comments', authenticateToken, async (req, res) => {
+  try {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    const access = await getProjectAccess(task.project_id, req.userId);
+    if (!access.hasAccess) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const { content, parent_comment_id } = req.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Comment content is required' });
+    }
+
+    if (content.length > 5000) {
+      return res.status(400).json({ error: 'Comment content must be 5000 characters or less' });
+    }
+
+    if (parent_comment_id) {
+      const parentCheck = await pool.query(
+        `SELECT id FROM task_comments WHERE id = $1 AND task_id = $2`,
+        [parent_comment_id, req.params.id]
+      );
+      if (parentCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Parent comment not found' });
+      }
+    }
+
+    const commentResult = await pool.query(
+      `INSERT INTO task_comments (task_id, user_id, content, parent_comment_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [req.params.id, req.userId, content.trim(), parent_comment_id || null]
+    );
+
+    const newComment = commentResult.rows[0];
+
+    // Parse mentions from content (@username pattern)
+    const mentionPattern = /@(\w+)/g;
+    const mentions = [];
+    let match;
+    while ((match = mentionPattern.exec(content)) !== null) {
+      mentions.push(match[1]);
+    }
+
+    // Find user IDs for mentioned usernames
+    if (mentions.length > 0) {
+      const uniqueMentions = [...new Set(mentions)];
+      const userResult = await pool.query(
+        `SELECT id, username FROM profiles WHERE username = ANY($1::text[])`,
+        [uniqueMentions]
+      );
+
+      for (const user of userResult.rows) {
+        await pool.query(
+          `INSERT INTO comment_mentions (comment_id, mentioned_user_id)
+           VALUES ($1, $2)
+           ON CONFLICT (comment_id, mentioned_user_id) DO NOTHING`,
+          [newComment.id, user.id]
+        );
+      }
+    }
+
+    // Fetch the comment with user info and mentions
+    const fullCommentResult = await pool.query(
+      `SELECT 
+        tc.*,
+        p.username AS user_username,
+        p.full_name AS user_full_name,
+        p.avatar_url AS user_avatar_url,
+        (
+          SELECT json_agg(json_build_object(
+            'id', cm.id,
+            'mentioned_user_id', cm.mentioned_user_id,
+            'mentioned_username', mp.username,
+            'mentioned_full_name', mp.full_name,
+            'mentioned_avatar_url', mp.avatar_url
+          ))
+          FROM comment_mentions cm
+          LEFT JOIN profiles mp ON mp.id = cm.mentioned_user_id
+          WHERE cm.comment_id = tc.id
+        ) AS mentions
+       FROM task_comments tc
+       LEFT JOIN profiles p ON p.id = tc.user_id
+       WHERE tc.id = $1`,
+      [newComment.id]
+    );
+
+    await logTaskActivity(req.params.id, req.userId, 'updated', null, null, { action: 'comment_added', comment_id: newComment.id });
+
+    res.status(201).json(fullCommentResult.rows[0]);
+  } catch (error) {
+    console.error('Error creating comment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update a comment
+router.put('/:id/comments/:commentId', authenticateToken, async (req, res) => {
+  try {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const { content } = req.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Comment content is required' });
+    }
+
+    if (content.length > 5000) {
+      return res.status(400).json({ error: 'Comment content must be 5000 characters or less' });
+    }
+
+    const commentResult = await pool.query(
+      `UPDATE task_comments
+       SET content = $1, updated_at = NOW()
+       WHERE id = $2 AND task_id = $3 AND user_id = $4
+       RETURNING *`,
+      [content.trim(), req.params.commentId, req.params.id, req.userId]
+    );
+
+    if (commentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Comment not found or you do not have permission to edit it' });
+    }
+
+    // Update mentions
+    await pool.query(
+      `DELETE FROM comment_mentions WHERE comment_id = $1`,
+      [req.params.commentId]
+    );
+
+    const mentionPattern = /@(\w+)/g;
+    const mentions = [];
+    let match;
+    while ((match = mentionPattern.exec(content)) !== null) {
+      mentions.push(match[1]);
+    }
+
+    if (mentions.length > 0) {
+      const uniqueMentions = [...new Set(mentions)];
+      const userResult = await pool.query(
+        `SELECT id, username FROM profiles WHERE username = ANY($1::text[])`,
+        [uniqueMentions]
+      );
+
+      for (const user of userResult.rows) {
+        await pool.query(
+          `INSERT INTO comment_mentions (comment_id, mentioned_user_id)
+           VALUES ($1, $2)
+           ON CONFLICT (comment_id, mentioned_user_id) DO NOTHING`,
+          [req.params.commentId, user.id]
+        );
+      }
+    }
+
+    const fullCommentResult = await pool.query(
+      `SELECT 
+        tc.*,
+        p.username AS user_username,
+        p.full_name AS user_full_name,
+        p.avatar_url AS user_avatar_url,
+        (
+          SELECT json_agg(json_build_object(
+            'id', cm.id,
+            'mentioned_user_id', cm.mentioned_user_id,
+            'mentioned_username', mp.username,
+            'mentioned_full_name', mp.full_name,
+            'mentioned_avatar_url', mp.avatar_url
+          ))
+          FROM comment_mentions cm
+          LEFT JOIN profiles mp ON mp.id = cm.mentioned_user_id
+          WHERE cm.comment_id = tc.id
+        ) AS mentions
+       FROM task_comments tc
+       LEFT JOIN profiles p ON p.id = tc.user_id
+       WHERE tc.id = $1`,
+      [req.params.commentId]
+    );
+
+    res.json(fullCommentResult.rows[0]);
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete a comment
+router.delete('/:id/comments/:commentId', authenticateToken, async (req, res) => {
+  try {
+    const task = await getAccessibleTask(req.params.id, req.userId);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const commentResult = await pool.query(
+      `DELETE FROM task_comments
+       WHERE id = $1 AND task_id = $2 AND user_id = $3
+       RETURNING *`,
+      [req.params.commentId, req.params.id, req.userId]
+    );
+
+    if (commentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Comment not found or you do not have permission to delete it' });
+    }
+
+    await logTaskActivity(req.params.id, req.userId, 'updated', null, null, { action: 'comment_deleted', comment_id: req.params.commentId });
+
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting comment:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1165,7 +1518,10 @@ router.post('/', authenticateToken, async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const newTask = result.rows[0];
+    await logTaskActivity(newTask.id, req.userId, 'created', null, null, { title: newTask.title });
+
+    res.status(201).json(newTask);
   } catch (error) {
     console.error('Error creating task:', error);
     console.error('Error details:', error.message, error.stack);
@@ -1533,6 +1889,89 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const previousTask = existingTask.rows[0];
     const updatedTask = result.rows[0];
 
+    // Log activities for changed fields
+    if (updatedTitle !== null && updatedTitle !== previousTask.title) {
+      await logTaskActivity(req.params.id, req.userId, 'title_changed', previousTask.title, updatedTitle);
+    }
+    if (shouldUpdateDescription && updatedDescription !== previousTask.description) {
+      await logTaskActivity(req.params.id, req.userId, 'description_changed', previousTask.description || '', updatedDescription || '');
+    }
+    if (updatedStatus !== null && updatedStatus !== previousTask.status) {
+      await logTaskActivity(req.params.id, req.userId, 'status_changed', previousTask.status, updatedStatus);
+    }
+    if (shouldUpdateStartDate && String(updatedStartDate || '') !== String(previousTask.start_date || '')) {
+      await logTaskActivity(req.params.id, req.userId, 'start_date_changed', previousTask.start_date || '', updatedStartDate || '');
+    }
+    if (shouldUpdateDueDate && String(updatedDueDate || '') !== String(previousTask.due_date || '')) {
+      await logTaskActivity(req.params.id, req.userId, 'due_date_changed', previousTask.due_date || '', updatedDueDate || '');
+    }
+    if (updatedPriority !== null && updatedPriority !== previousTask.priority) {
+      await logTaskActivity(req.params.id, req.userId, 'priority_changed', previousTask.priority, updatedPriority);
+    }
+    if (updatedTags !== null) {
+      const oldTags = Array.isArray(previousTask.tags) ? previousTask.tags : [];
+      const newTags = JSON.parse(updatedTags);
+      const addedTags = newTags.filter(t => !oldTags.includes(t));
+      const removedTags = oldTags.filter(t => !newTags.includes(t));
+      addedTags.forEach(tag => {
+        logTaskActivity(req.params.id, req.userId, 'tag_added', null, tag);
+      });
+      removedTags.forEach(tag => {
+        logTaskActivity(req.params.id, req.userId, 'tag_removed', tag, null);
+      });
+    }
+    if (shouldUpdateParentTaskId && String(updatedParentTaskId || '') !== String(previousTask.parent_task_id || '')) {
+      if (updatedParentTaskId) {
+        await logTaskActivity(req.params.id, req.userId, 'updated', null, null, {
+          field: 'parent_task_id',
+          action: 'made_subtask',
+          parent_task_id: updatedParentTaskId
+        });
+      } else {
+        await logTaskActivity(req.params.id, req.userId, 'updated', null, null, {
+          field: 'parent_task_id',
+          action: 'removed_from_parent'
+        });
+      }
+    }
+    if (shouldUpdateEstimatedMinutes && updatedEstimatedMinutes !== previousTask.estimated_minutes) {
+      await logTaskActivity(req.params.id, req.userId, 'updated',
+        previousTask.estimated_minutes ? `${previousTask.estimated_minutes} minutes` : 'Not set',
+        updatedEstimatedMinutes ? `${updatedEstimatedMinutes} minutes` : 'Not set',
+        { field: 'estimated_minutes' }
+      );
+    }
+    if (shouldUpdatePlannedForDate && String(updatedPlannedForDate || '') !== String(previousTask.planned_for_date || '')) {
+      await logTaskActivity(req.params.id, req.userId, 'updated',
+        previousTask.planned_for_date || 'Not set',
+        updatedPlannedForDate || 'Not set',
+        { field: 'planned_for_date' }
+      );
+    }
+    if (shouldUpdatePlanPinned && updatedPlanPinned !== previousTask.plan_pinned) {
+      await logTaskActivity(req.params.id, req.userId, 'updated', null, null, {
+        field: 'plan_pinned',
+        action: updatedPlanPinned ? 'pinned_to_plan' : 'unpinned_from_plan'
+      });
+    }
+    if (shouldUpdateRecurrenceType) {
+      const oldRecurrence = previousTask.recurrence_type
+        ? `${previousTask.recurrence_interval || 1} ${previousTask.recurrence_type}`
+        : 'None';
+      const newRecurrence = updatedRecurrenceType
+        ? `${updatedRecurrenceInterval || 1} ${updatedRecurrenceType}`
+        : 'None';
+      await logTaskActivity(req.params.id, req.userId, 'updated', oldRecurrence, newRecurrence, {
+        field: 'recurrence'
+      });
+    }
+    if (updatedPosition !== null && updatedPosition !== previousTask.position) {
+      await logTaskActivity(req.params.id, req.userId, 'updated', null, null, {
+        field: 'position',
+        action: 'moved_in_kanban'
+      });
+    }
+
     const shouldGenerateNextTask = (
       previousTask.status !== 'done' &&
       updatedTask.status === 'done' &&
@@ -1636,6 +2075,9 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
+
+    const deletedTask = result.rows[0];
+    await logTaskActivity(req.params.id, req.userId, 'deleted', null, null, { title: deletedTask.title });
 
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {

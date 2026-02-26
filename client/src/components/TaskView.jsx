@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tasksAPI } from '../services/api';
 import SubtaskList from './SubtaskList';
+import ActivityFeed from './ActivityFeed';
+import TaskComments from './TaskComments';
 
 function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, canDeleteTasks = true }) {
   const queryClient = useQueryClient();
@@ -557,6 +559,14 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                     }
                   }}
                 />
+              </div>
+
+              <div className="pt-4 border-t border-white/10">
+                <ActivityFeed taskId={currentTask.id} />
+              </div>
+
+              <div className="pt-4 border-t border-white/10">
+                <TaskComments taskId={currentTask.id} canManageTasks={canManageTasks} />
               </div>
 
               <div className="flex gap-4 justify-end pt-4 border-t border-white/10">
