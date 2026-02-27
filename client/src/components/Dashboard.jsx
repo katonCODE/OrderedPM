@@ -14,6 +14,7 @@ import GlobalTaskSearch from './GlobalTaskSearch';
 import QuickAddTaskForm from './QuickAddTaskForm';
 import { ProjectCardSkeleton, StatsSkeleton } from './SkeletonLoader';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import './Dashboard.css';
 
 function Dashboard({ onLogout }) {
@@ -88,6 +89,20 @@ function Dashboard({ onLogout }) {
     queryKey: ['tasks', 'today'],
     queryFn: () => tasksAPI.getToday(),
     placeholderData: (previousData) => previousData,
+  });
+
+  useRealtimeSubscription('projects', {
+    queryKeys: [
+      ['projects', showArchived],
+      ['projects', 'all-for-dashboard'],
+    ],
+  });
+
+  useRealtimeSubscription('tasks', {
+    queryKeys: [
+      ['tasks', 'all'],
+      ['tasks', 'today'],
+    ],
   });
 
   const allProjects = projectsData?.data || projectsData || [];

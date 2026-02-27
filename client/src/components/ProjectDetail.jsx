@@ -14,6 +14,7 @@ import TaskView from './TaskView';
 import GlobalTaskSearch from './GlobalTaskSearch';
 import { ProjectDetailSkeleton } from './SkeletonLoader';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import './ProjectDetail.css';
 
 function ProjectDetail() {
@@ -72,6 +73,25 @@ function ProjectDetail() {
     queryKey: ['projectShareLinks', id],
     queryFn: () => projectsAPI.getShareLinks(id),
     enabled: Boolean(project),
+  });
+
+  useRealtimeSubscription('tasks', {
+    filter: `project_id=eq.${id}`,
+    queryKeys: [
+      ['tasks', id],
+      ['tasks', 'all'],
+      ['tasks', 'today'],
+    ],
+    enabled: !!id,
+  });
+
+  useRealtimeSubscription('projects', {
+    filter: `id=eq.${id}`,
+    queryKeys: [
+      ['project', id],
+      ['projects'],
+    ],
+    enabled: !!id,
   });
 
   // Handle both old format (array) and new format (object with data and pagination)
