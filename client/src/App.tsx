@@ -12,7 +12,7 @@ import ShareLinkRedeem from './components/ShareLinkRedeem';
 import EmailConfirmation from './components/EmailConfirmation';
 import Profile from './components/Profile';
 import LandingPage from './components/LandingPage';
-import Solutions from './components/Solutions';
+import About from './components/About';
 import './App.css';
 
 interface Session {
@@ -193,8 +193,8 @@ function App() {
             element={<Profile />}
           />
           <Route
-            path="/solutions"
-            element={<Solutions />}
+            path="/about"
+            element={<About />}
           />
           <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} replace />} />
         </Routes>

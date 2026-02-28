@@ -35,7 +35,7 @@ const LandingPage: React.FC = () => {
             {/* Subheadline */}
             <p className="text-lg md:text-xl text-gray-400 leading-relaxed max-w-xl">
               AI-powered task creation with Gemini 2.5 Flash, intuitive Kanban boards,
-              seamless project organization, and effortless team collaboration—all in one place.
+              seamless project organization, and effortless team collaboration all in one place.
             </p>
 
             {/* Buttons */}
@@ -46,12 +46,6 @@ const LandingPage: React.FC = () => {
               >
                 Get Started
               </Link>
-              <button className="px-8 py-4 border-2 border-gray-600 text-[#e0e0e0] font-semibold rounded-lg hover:border-gray-500 hover:text-white transition-all flex items-center justify-center gap-2">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                </svg>
-                Watch Demo
-              </button>
             </div>
 
             {/* Trust Signal */}
@@ -71,68 +65,97 @@ const LandingPage: React.FC = () => {
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur opacity-50"></div>
 
               <div className="relative">
-                {/* Mini Kanban Board Preview */}
-                <div className="mb-6">
+                {/* Project Dashboard Preview */}
+                <div>
                   <h3 className="text-lg font-semibold text-[#e0e0e0] mb-4">Project Dashboard</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* To Do Column */}
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                        To Do
-                      </div>
-                      <div className="bg-white/10 rounded-lg p-3 border border-white/10">
-                        <div className="text-sm font-medium text-[#e0e0e0] mb-1">Design mockups</div>
-                        <div className="text-xs text-gray-500">Due tomorrow</div>
-                      </div>
-                      <div className="bg-white/10 rounded-lg p-3 border border-white/10">
-                        <div className="text-sm font-medium text-[#e0e0e0] mb-1">Review PR</div>
-                        <div className="text-xs text-gray-500">High priority</div>
-                      </div>
+                  
+                  {/* Stats Overview */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4">
+                      <div className="text-xs text-gray-400 mb-1">Total Projects</div>
+                      <div className="text-2xl font-bold text-[#e0e0e0]">3</div>
                     </div>
-
-                    {/* In Progress Column */}
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                        In Progress
-                      </div>
-                      <div className="bg-blue-500/20 rounded-lg p-3 border border-blue-500/30">
-                        <div className="text-sm font-medium text-[#e0e0e0] mb-1">Build API</div>
-                        <div className="text-xs text-gray-500">In progress</div>
-                      </div>
-                      <div className="bg-white/10 rounded-lg p-3 border border-white/10">
-                        <div className="text-sm font-medium text-[#e0e0e0] mb-1">Write docs</div>
-                        <div className="text-xs text-gray-500">2 days left</div>
-                      </div>
-                    </div>
-
-                    {/* Done Column */}
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                        Done
-                      </div>
-                      <div className="bg-green-500/20 rounded-lg p-3 border border-green-500/30 opacity-60">
-                        <div className="text-sm font-medium text-[#e0e0e0] mb-1 line-through">Setup project</div>
-                        <div className="text-xs text-gray-500">Completed</div>
-                      </div>
-                      <div className="bg-green-500/20 rounded-lg p-3 border border-green-500/30 opacity-60">
-                        <div className="text-sm font-medium text-[#e0e0e0] mb-1 line-through">Team meeting</div>
-                        <div className="text-xs text-gray-500">Completed</div>
-                      </div>
+                    <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4">
+                      <div className="text-xs text-gray-400 mb-1">Active Tasks</div>
+                      <div className="text-2xl font-bold text-blue-400">24</div>
                     </div>
                   </div>
-                </div>
 
-                {/* Project Cards Preview */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full mb-2"></div>
-                    <div className="text-sm font-medium text-[#e0e0e0] mb-1">Web App</div>
-                    <div className="text-xs text-gray-500">12 tasks</div>
-                  </div>
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full mb-2"></div>
-                    <div className="text-sm font-medium text-[#e0e0e0] mb-1">Mobile</div>
-                    <div className="text-xs text-gray-500">8 tasks</div>
+                  {/* Project Cards Preview */}
+                  <div className="space-y-3">
+                    {/* Project Card 1 */}
+                    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 group">
+                      <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-xl blur opacity-0 group-hover:opacity-50 transition-opacity"></div>
+                      <div className="relative">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="text-base font-semibold text-[#e0e0e0]">Web App</h4>
+                          <div className="flex gap-1.5">
+                            <button className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-[#e0e0e0] text-xs">✏️</button>
+                            <button className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-[#e0e0e0] text-xs">🗑️</button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs text-gray-400">Progress</span>
+                              <span className="text-xs font-medium text-[#e0e0e0]">65%</span>
+                            </div>
+                            <div className="w-full bg-white/5 rounded-full h-1.5">
+                              <div
+                                className="bg-gradient-to-r from-blue-500 to-purple-500 h-1.5 rounded-full"
+                                style={{ width: '65%' }}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-3 text-gray-400">
+                              <span>12 tasks</span>
+                              <span className="text-green-400">8 done</span>
+                            </div>
+                            <div className="text-gray-500">
+                              Updated {new Date().toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Project Card 2 */}
+                    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 group">
+                      <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-xl blur opacity-0 group-hover:opacity-50 transition-opacity"></div>
+                      <div className="relative">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="text-base font-semibold text-[#e0e0e0]">Mobile App</h4>
+                          <div className="flex gap-1.5">
+                            <button className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-[#e0e0e0] text-xs">✏️</button>
+                            <button className="p-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-[#e0e0e0] text-xs">🗑️</button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs text-gray-400">Progress</span>
+                              <span className="text-xs font-medium text-[#e0e0e0]">40%</span>
+                            </div>
+                            <div className="w-full bg-white/5 rounded-full h-1.5">
+                              <div
+                                className="bg-gradient-to-r from-blue-500 to-purple-500 h-1.5 rounded-full"
+                                style={{ width: '40%' }}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-3 text-gray-400">
+                              <span>8 tasks</span>
+                              <span className="text-green-400">3 done</span>
+                            </div>
+                            <div className="text-gray-500">
+                              Updated {new Date().toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

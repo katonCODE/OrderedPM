@@ -30,13 +30,13 @@ const Navigation: React.FC = () => {
             Home
           </Link>
           <Link
-            to="/solutions"
-            className={`text-sm md:text-base transition-all hidden md:inline-block ${isActive('/solutions')
+            to="/about"
+            className={`text-sm md:text-base transition-all hidden md:inline-block ${isActive('/about')
                 ? 'text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.6)] font-medium'
                 : 'text-[#e0e0e0] hover:text-white'
               }`}
           >
-            Solutions
+            About
           </Link>
           <Link
             to="/login"
