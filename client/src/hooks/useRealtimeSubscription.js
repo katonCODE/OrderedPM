@@ -48,15 +48,19 @@ export function useRealtimeSubscription(table, options = {}) {
 
     const startSubscription = async () => {
       try {
-        // Bind realtime auth only when Supabase session token is available.
+        // Only subscribe if user is authenticated
         const { data } = await supabase.auth.getSession();
         const sessionToken = data?.session?.access_token;
-        if (sessionToken) {
-          supabase.realtime.setAuth(sessionToken);
+        
+        if (!sessionToken) {
+          // No authenticated session, skip subscription
+          return;
         }
+
+        supabase.realtime.setAuth(sessionToken);
       } catch (error) {
-        // If session lookup fails, continue subscription setup and let channel status logging expose issues.
-        console.error('Realtime session lookup failed:', error);
+        // If session lookup fails, skip subscription
+        return;
       }
 
       if (cancelled) return;
@@ -101,13 +105,7 @@ export function useRealtimeSubscription(table, options = {}) {
             }
           }
         )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log(`✅ Realtime subscription active for ${table}`);
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            console.error(`❌ Realtime subscription status for ${table}: ${status}`);
-          }
-        });
+        .subscribe();
 
       channelRef.current = channel;
     };
