@@ -13,6 +13,7 @@ import EmailConfirmation from './components/EmailConfirmation';
 import Profile from './components/Profile';
 import LandingPage from './components/LandingPage';
 import About from './components/About';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 interface Session {
@@ -127,9 +128,10 @@ function App() {
   }
 
   return (
-    <Router>
-      <div className="App">
-        <Routes>
+    <ErrorBoundary>
+      <Router>
+        <div className="App">
+          <Routes>
           <Route
             path="/login"
             element={
@@ -197,9 +199,10 @@ function App() {
             element={<About />}
           />
           <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} replace />} />
-        </Routes>
-      </div>
-    </Router>
+          </Routes>
+        </div>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

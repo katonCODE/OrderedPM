@@ -5,6 +5,7 @@ const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
 const createAIRateLimiter = require('../middleware/rateLimit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { safeParseInt, isValidUUID, validateStringLength, safeJsonParse } = require('../utils/validation');
 
 const aiRateLimiter = createAIRateLimiter();
 const VALID_RECURRENCE_TYPES = ['daily', 'weekly', 'monthly'];
@@ -148,7 +149,16 @@ const logTaskActivity = async (taskId, userId, activityType, oldValue = null, ne
       [taskId, userId, activityType, oldValue, newValue, JSON.stringify(metadata)]
     );
   } catch (error) {
+    // Log to monitoring service (Sentry, DataDog, etc.) if available
     console.error('Error logging task activity:', error);
+    
+    // Ensure error is visible in logs for debugging
+    // Don't throw - activity logging shouldn't break main flow
+    // But ensure visibility for debugging
+    if (process.env.NODE_ENV === 'production') {
+      // In production, you might want to send to monitoring service
+      // monitoringService.captureException(error, { tags: { component: 'activity-logging' } });
+    }
   }
 };
 
@@ -229,24 +239,29 @@ router.get('/user/all', authenticateToken, async (req, res) => {
 // Get all tasks for a project
 router.get('/project/:projectId', authenticateToken, async (req, res) => {
   try {
+    // Validate project ID UUID format
+    if (!isValidUUID(req.params.projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID format' });
+    }
+
     const canAccessProject = await hasProjectAccess(req.params.projectId, req.userId);
     if (!canAccessProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = parseInt(req.query.offset) || 0;
+    const limit = safeParseInt(req.query.limit, 50, 1, 100);
+    const offset = safeParseInt(req.query.offset, 0, 0);
 
-    // Validate limit and offset
-    const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
-    const validOffset = Math.max(0, offset);
+    // Validate limit and offset (already validated by safeParseInt)
+    const validLimit = limit;
+    const validOffset = offset;
 
     // Get total count for pagination metadata (only top-level tasks)
     const countResult = await pool.query(
       'SELECT COUNT(*) FROM tasks WHERE project_id = $1 AND parent_task_id IS NULL',
       [req.params.projectId]
     );
-    const total = parseInt(countResult.rows[0].count);
+    const total = safeParseInt(countResult.rows[0]?.count, 0, 0);
 
     // Get paginated top-level tasks, ordered by position (for Kanban) then created_at
     const result = await pool.query(
@@ -278,7 +293,7 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
     );
 
     // Get all subtasks for the returned tasks
-    const parentTaskIds = result.rows.map(task => task.id);
+    const parentTaskIds = Array.isArray(result.rows) ? result.rows.map(task => task.id) : [];
     let subtasks = [];
     if (parentTaskIds.length > 0) {
       const subtasksResult = await pool.query(
@@ -293,21 +308,21 @@ router.get('/project/:projectId', authenticateToken, async (req, res) => {
          ORDER BY t.created_at ASC`,
         [parentTaskIds]
       );
-      subtasks = subtasksResult.rows;
+      subtasks = Array.isArray(subtasksResult.rows) ? subtasksResult.rows : [];
     }
 
     // Group subtasks under their parents
-    const tasksWithSubtasks = result.rows.map(task => {
-      const taskSubtasks = subtasks.filter(st => st.parent_task_id === task.id);
+    const tasksWithSubtasks = Array.isArray(result.rows) ? result.rows.map(task => {
+      const taskSubtasks = Array.isArray(subtasks) ? subtasks.filter(st => st && st.parent_task_id === task.id) : [];
       return {
         ...task,
-        blocked_by_count: parseInt(task.blocked_by_count) || 0,
-        blocking_count: parseInt(task.blocking_count) || 0,
-        completed_subtasks: parseInt(task.completed_subtasks) || 0,
-        total_subtasks: parseInt(task.total_subtasks) || 0,
+        blocked_by_count: safeParseInt(task.blocked_by_count, 0, 0),
+        blocking_count: safeParseInt(task.blocking_count, 0, 0),
+        completed_subtasks: safeParseInt(task.completed_subtasks, 0, 0),
+        total_subtasks: safeParseInt(task.total_subtasks, 0, 0),
         subtasks: taskSubtasks
       };
-    });
+    }) : [];
 
     res.json({
       data: tasksWithSubtasks,
@@ -331,7 +346,7 @@ router.get('/search', authenticateToken, async (req, res) => {
     if (!q) {
       return res.json({ data: [] });
     }
-    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 20), 50);
+    const limit = safeParseInt(req.query.limit, 20, 1, 50);
     const result = await pool.query(
       `SELECT t.id, t.project_id, t.title, t.status, t.due_date, t.priority, p.name AS project_name
        FROM tasks t
@@ -529,12 +544,17 @@ router.get('/focus/active', authenticateToken, async (req, res) => {
 
 router.get('/:id/focus/sessions', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 10), 50);
+    const limit = safeParseInt(req.query.limit, 10, 1, 50);
     const result = await pool.query(
       `SELECT *
        FROM focus_sessions
@@ -556,6 +576,11 @@ router.get('/:id/focus/sessions', authenticateToken, async (req, res) => {
 
 router.post('/:id/focus/start', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -613,6 +638,14 @@ router.post('/:id/focus/start', authenticateToken, async (req, res) => {
 
 router.post('/:id/focus/:sessionId/end', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID and session ID UUID formats
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+    if (!isValidUUID(req.params.sessionId)) {
+      return res.status(400).json({ error: 'Invalid session ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -681,6 +714,11 @@ router.post('/:id/focus/:sessionId/end', authenticateToken, async (req, res) => 
 // Get a single task by ID
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const result = await pool.query(
       `SELECT 
         t.*,
@@ -734,11 +772,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     res.json({
       ...task,
-      blocked_by_count: parseInt(task.blocked_by_count) || 0,
-      blocking_count: parseInt(task.blocking_count) || 0,
-      completed_subtasks: parseInt(task.completed_subtasks) || 0,
-      total_subtasks: parseInt(task.total_subtasks) || 0,
-      subtasks: subtasksResult.rows
+      blocked_by_count: safeParseInt(task.blocked_by_count, 0, 0),
+      blocking_count: safeParseInt(task.blocking_count, 0, 0),
+      completed_subtasks: safeParseInt(task.completed_subtasks, 0, 0),
+      total_subtasks: safeParseInt(task.total_subtasks, 0, 0),
+      subtasks: Array.isArray(subtasksResult.rows) ? subtasksResult.rows : []
     });
   } catch (error) {
     console.error('Error fetching task:', error);
@@ -749,6 +787,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Get subtasks for a task
 router.get('/:id/subtasks', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const parentTask = await getAccessibleTask(req.params.id, req.userId);
     if (!parentTask) {
       return res.status(404).json({ error: 'Task not found' });
@@ -770,6 +813,11 @@ router.get('/:id/subtasks', authenticateToken, async (req, res) => {
 
 router.get('/:id/dependencies', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -785,10 +833,20 @@ router.get('/:id/dependencies', authenticateToken, async (req, res) => {
 
 router.post('/:id/dependencies', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const { blocker_task_id } = req.body;
 
     if (!blocker_task_id) {
       return res.status(400).json({ error: 'Blocker task ID is required' });
+    }
+
+    // Validate blocker task ID UUID format
+    if (!isValidUUID(blocker_task_id)) {
+      return res.status(400).json({ error: 'Invalid blocker task ID format' });
     }
 
     if (blocker_task_id === req.params.id) {
@@ -859,6 +917,14 @@ router.post('/:id/dependencies', authenticateToken, async (req, res) => {
 
 router.delete('/:id/dependencies/:blockerId', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID and blocker ID UUID formats
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+    if (!isValidUUID(req.params.blockerId)) {
+      return res.status(400).json({ error: 'Invalid blocker task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -894,6 +960,11 @@ router.delete('/:id/dependencies/:blockerId', authenticateToken, async (req, res
 // Search users for mentions in task comments
 router.get('/:id/mention-candidates', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -939,13 +1010,18 @@ router.get('/:id/mention-candidates', authenticateToken, async (req, res) => {
 // Get activity feed for a task
 router.get('/:id/activities', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 50), 100);
-    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const limit = safeParseInt(req.query.limit, 50, 1, 100);
+    const offset = safeParseInt(req.query.offset, 0, 0);
 
     const result = await pool.query(
       `SELECT 
@@ -971,6 +1047,11 @@ router.get('/:id/activities', authenticateToken, async (req, res) => {
 // Get comments for a task
 router.get('/:id/comments', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -1011,6 +1092,11 @@ router.get('/:id/comments', authenticateToken, async (req, res) => {
 // Create a comment on a task
 router.post('/:id/comments', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -1022,12 +1108,15 @@ router.post('/:id/comments', authenticateToken, async (req, res) => {
 
     const { content, parent_comment_id } = req.body;
 
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return res.status(400).json({ error: 'Comment content is required' });
+    // Validate comment content
+    const contentValidation = validateStringLength(content, 5000, false);
+    if (!contentValidation.valid) {
+      return res.status(400).json({ error: contentValidation.error || 'Comment content is required' });
     }
 
-    if (content.length > 5000) {
-      return res.status(400).json({ error: 'Comment content must be 5000 characters or less' });
+    // Validate parent_comment_id UUID format if provided
+    if (parent_comment_id && !isValidUUID(parent_comment_id)) {
+      return res.status(400).json({ error: 'Invalid parent comment ID format' });
     }
 
     if (parent_comment_id) {
@@ -1112,6 +1201,14 @@ router.post('/:id/comments', authenticateToken, async (req, res) => {
 // Update a comment
 router.put('/:id/comments/:commentId', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID and comment ID UUID formats
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+    if (!isValidUUID(req.params.commentId)) {
+      return res.status(400).json({ error: 'Invalid comment ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -1119,12 +1216,10 @@ router.put('/:id/comments/:commentId', authenticateToken, async (req, res) => {
 
     const { content } = req.body;
 
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return res.status(400).json({ error: 'Comment content is required' });
-    }
-
-    if (content.length > 5000) {
-      return res.status(400).json({ error: 'Comment content must be 5000 characters or less' });
+    // Validate comment content
+    const contentValidation = validateStringLength(content, 5000, false);
+    if (!contentValidation.valid) {
+      return res.status(400).json({ error: contentValidation.error || 'Comment content is required' });
     }
 
     const commentResult = await pool.query(
@@ -1203,6 +1298,14 @@ router.put('/:id/comments/:commentId', authenticateToken, async (req, res) => {
 // Delete a comment
 router.delete('/:id/comments/:commentId', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID and comment ID UUID formats
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+    if (!isValidUUID(req.params.commentId)) {
+      return res.status(400).json({ error: 'Invalid comment ID format' });
+    }
+
     const task = await getAccessibleTask(req.params.id, req.userId);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
@@ -1412,8 +1515,28 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Either Project ID or Parent Task ID is required' });
     }
 
-    if (!title || title.trim() === '') {
-      return res.status(400).json({ error: 'Task title is required' });
+    // Validate project_id UUID format if provided
+    if (project_id && !isValidUUID(project_id)) {
+      return res.status(400).json({ error: 'Invalid project ID format' });
+    }
+
+    // Validate parent_task_id UUID format if provided
+    if (parent_task_id && !isValidUUID(parent_task_id)) {
+      return res.status(400).json({ error: 'Invalid parent task ID format' });
+    }
+
+    // Validate title
+    const titleValidation = validateStringLength(title, 500, false);
+    if (!titleValidation.valid) {
+      return res.status(400).json({ error: titleValidation.error || 'Task title is required' });
+    }
+
+    // Validate description length if provided
+    if (description !== undefined && description !== null) {
+      const descValidation = validateStringLength(description, 10000, true);
+      if (!descValidation.valid) {
+        return res.status(400).json({ error: descValidation.error });
+      }
     }
 
     let projectId = project_id;
@@ -1532,6 +1655,11 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update a task
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     // Verify task exists and belongs to user
     const existingTaskRow = await getAccessibleTask(req.params.id, req.userId);
     if (!existingTaskRow) {
@@ -1596,15 +1724,19 @@ router.put('/:id', authenticateToken, async (req, res) => {
     let updatedPlanPinned = false;
 
     if (title !== undefined) {
-      const trimmedTitle = title.trim();
-      if (!trimmedTitle) {
-        return res.status(400).json({ error: 'Task title cannot be empty' });
+      const titleValidation = validateStringLength(title, 500, false);
+      if (!titleValidation.valid) {
+        return res.status(400).json({ error: titleValidation.error || 'Task title cannot be empty' });
       }
-      updatedTitle = trimmedTitle;
+      updatedTitle = title.trim();
     }
 
     if (description !== undefined) {
       shouldUpdateDescription = true;
+      const descValidation = validateStringLength(description, 10000, true);
+      if (!descValidation.valid) {
+        return res.status(400).json({ error: descValidation.error });
+      }
       updatedDescription = description?.trim() || null;
     }
 
@@ -1659,6 +1791,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
         // Removing parent (making it a top-level task)
         updatedParentTaskId = null;
       } else {
+        // Validate parent_task_id UUID format
+        if (!isValidUUID(parent_task_id)) {
+          return res.status(400).json({ error: 'Invalid parent task ID format' });
+        }
         // Verify parent task exists and belongs to user
         const parentCheck = await pool.query(
           `SELECT t.id
@@ -1910,7 +2046,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
     if (updatedTags !== null) {
       const oldTags = Array.isArray(previousTask.tags) ? previousTask.tags : [];
-      const newTags = JSON.parse(updatedTags);
+      const parseResult = safeJsonParse(updatedTags, []);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: 'Invalid tags format: ' + parseResult.error });
+      }
+      const newTags = parseResult.data;
+      if (!Array.isArray(newTags)) {
+        return res.status(400).json({ error: 'Tags must be an array' });
+      }
       const addedTags = newTags.filter(t => !oldTags.includes(t));
       const removedTags = oldTags.filter(t => !newTags.includes(t));
       addedTags.forEach(tag => {
@@ -2042,6 +2185,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
 // Delete a task
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    // Validate task ID UUID format
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
     // First check if task exists and get project access
     const existingTaskRow = await getAccessibleTask(req.params.id, req.userId);
     if (!existingTaskRow) {

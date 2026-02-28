@@ -32,23 +32,25 @@ const GlobalTaskSearch = forwardRef(function GlobalTaskSearch(props, ref) {
       setOpen(debouncedQuery.length > 0);
       return;
     }
-    let cancelled = false;
+    const cancelledRef = { current: false };
     setLoading(true);
     tasksAPI
       .search(debouncedQuery, { limit: 20 })
       .then((res) => {
-        if (!cancelled) {
+        if (!cancelledRef.current) {
           setResults(res.data || []);
           setOpen(true);
         }
       })
       .catch(() => {
-        if (!cancelled) setResults([]);
+        if (!cancelledRef.current) setResults([]);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelledRef.current) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [debouncedQuery]);
 
   useEffect(() => {

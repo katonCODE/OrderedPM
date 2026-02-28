@@ -4,7 +4,6 @@ import { getAccessToken, clearTokens } from '../utils/token';
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
-let isRefreshing = false;
 let refreshPromise = null;
 
 const getAuthHeaders = () => {
@@ -19,20 +18,19 @@ const getAuthHeaders = () => {
 };
 
 const refreshToken = async () => {
-  if (isRefreshing) {
+  // If already refreshing, return existing promise
+  if (refreshPromise) {
     return refreshPromise;
   }
 
-  isRefreshing = true;
+  // Create new refresh promise
   refreshPromise = authService.refreshSession()
     .then((session) => {
-      isRefreshing = false;
-      refreshPromise = null;
+      refreshPromise = null; // Clear on success
       return session;
     })
     .catch((error) => {
-      isRefreshing = false;
-      refreshPromise = null;
+      refreshPromise = null; // Clear on error
       clearTokens();
       throw error;
     });

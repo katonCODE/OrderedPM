@@ -1,6 +1,7 @@
 // server/middleware/rateLimit.js
 const rateLimit = require('express-rate-limit');
 const pool = require('../db/connection');
+const { safeParseInt } = require('../utils/validation');
 
 // PostgreSQL store for express-rate-limit
 class PostgresStore {
@@ -36,8 +37,9 @@ class PostgresStore {
             resetTime: resetTime,
           };
         } else {
-          // Increment existing counter
-          const newHits = parseInt(row.hits) + 1;
+          // Increment existing counter (safely parse hits value)
+          const currentHits = safeParseInt(row.hits, 0, 0);
+          const newHits = currentHits + 1;
           await client.query(
             'UPDATE rate_limits SET hits = $1 WHERE key = $2',
             [newHits, key]

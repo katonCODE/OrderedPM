@@ -25,8 +25,15 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('Unexpected error on idle database client', err);
+  // Log to monitoring service (e.g., Sentry) if available
+  // Don't exit - let the pool handle reconnection
+  // Only exit if it's a critical configuration error
+  if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
+    console.error('Critical database connection error - check DATABASE_URL');
+    // Consider graceful shutdown with health check endpoint
+    // For now, log and let the application continue
+  }
 });
 
 module.exports = pool;

@@ -3,11 +3,15 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
+const { validateStringLength } = require('../utils/validation');
 
 // Helper function to count words in a string
 const countWords = (text) => {
-  if (!text || text.trim() === '') return 0;
-  return text.trim().split(/\s+/).length;
+  if (!text || typeof text !== 'string') return 0;
+  const trimmed = text.trim();
+  if (trimmed === '') return 0;
+  // Split by whitespace and filter out empty strings (handles multiple spaces)
+  return trimmed.split(/\s+/).filter(word => word.length > 0).length;
 };
 
 // Get current user's profile
@@ -45,8 +49,9 @@ router.post('/me', authenticateToken, async (req, res) => {
     }
 
     // Validate username
-    if (!username || !username.trim()) {
-      return res.status(400).json({ error: 'Username is required' });
+    const usernameValidation = validateStringLength(username, 50, false);
+    if (!usernameValidation.valid) {
+      return res.status(400).json({ error: usernameValidation.error || 'Username is required' });
     }
 
     const trimmedUsername = username.trim();
@@ -63,9 +68,21 @@ router.post('/me', authenticateToken, async (req, res) => {
 
     // Validate bio word count if provided
     if (bio !== undefined && bio !== null) {
+      const bioValidation = validateStringLength(bio, 2000, true);
+      if (!bioValidation.valid) {
+        return res.status(400).json({ error: bioValidation.error });
+      }
       const wordCount = countWords(bio);
       if (wordCount > 150) {
         return res.status(400).json({ error: 'Bio must be 150 words or less' });
+      }
+    }
+
+    // Validate full_name length if provided
+    if (full_name !== undefined && full_name !== null) {
+      const fullNameValidation = validateStringLength(full_name, 200, true);
+      if (!fullNameValidation.valid) {
+        return res.status(400).json({ error: fullNameValidation.error });
       }
     }
 
@@ -128,10 +145,12 @@ router.put('/me', authenticateToken, async (req, res) => {
 
     // Validate username uniqueness if provided
     if (username !== undefined) {
-      const trimmedUsername = username.trim();
-      if (!trimmedUsername) {
-        return res.status(400).json({ error: 'Username cannot be empty' });
+      const usernameValidation = validateStringLength(username, 50, false);
+      if (!usernameValidation.valid) {
+        return res.status(400).json({ error: usernameValidation.error || 'Username cannot be empty' });
       }
+
+      const trimmedUsername = username.trim();
 
       // Check if username already exists for a different user
       const existingProfile = await pool.query(
@@ -146,9 +165,21 @@ router.put('/me', authenticateToken, async (req, res) => {
 
     // Validate bio word count if provided
     if (bio !== undefined) {
+      const bioValidation = validateStringLength(bio, 2000, true);
+      if (!bioValidation.valid) {
+        return res.status(400).json({ error: bioValidation.error });
+      }
       const wordCount = countWords(bio);
       if (wordCount > 150) {
         return res.status(400).json({ error: 'Bio must be 150 words or less' });
+      }
+    }
+
+    // Validate full_name length if provided
+    if (full_name !== undefined && full_name !== null) {
+      const fullNameValidation = validateStringLength(full_name, 200, true);
+      if (!fullNameValidation.valid) {
+        return res.status(400).json({ error: fullNameValidation.error });
       }
     }
 

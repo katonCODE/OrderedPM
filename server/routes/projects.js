@@ -4,6 +4,7 @@ const router = express.Router();
 const pool = require('../db/connection');
 const authenticateToken = require('../middleware/auth');
 const crypto = require('crypto');
+const { safeParseInt, isValidUUID, validateStringLength } = require('../utils/validation');
 
 const getProjectAccess = async (projectId, userId) => {
   const result = await pool.query(
@@ -37,6 +38,14 @@ const canAssignPermissionLevel = (access, permissionLevel) => {
   return permissionLevel === 'viewer' || permissionLevel === 'editor';
 };
 
+// Middleware to validate project ID UUID format
+const validateProjectId = (req, res, next) => {
+  if (req.params.id && !isValidUUID(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid project ID format' });
+  }
+  next();
+};
+
 const resolveUserByIdentifier = async (identifier) => {
   const value = String(identifier || '').trim();
   if (!value) return null;
@@ -62,14 +71,14 @@ const resolveUserByIdentifier = async (identifier) => {
 // Get all projects for the authenticated user
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = parseInt(req.query.offset) || 0;
+    const limit = safeParseInt(req.query.limit, 20, 1, 100);
+    const offset = safeParseInt(req.query.offset, 0, 0);
     const includeCount = req.query.includeCount === 'true';
     const includeArchived = req.query.includeArchived === 'true';
 
-    // Validate limit and offset
-    const validLimit = Math.min(Math.max(1, limit), 100); // Between 1 and 100
-    const validOffset = Math.max(0, offset);
+    // Validate limit and offset (already validated by safeParseInt, but keep for clarity)
+    const validLimit = limit;
+    const validOffset = offset;
 
     // Fetch limit + 1 to determine if there are more pages without COUNT query
     const fetchLimit = validLimit + 1;
@@ -115,7 +124,7 @@ router.get('/', authenticateToken, async (req, res) => {
         countQuery += ' AND (p.archived IS NULL OR p.archived = FALSE)';
       }
       const countResult = await pool.query(countQuery, [req.userId]);
-      total = parseInt(countResult.rows[0].count);
+      total = safeParseInt(countResult.rows[0]?.count, 0, 0);
     }
 
     res.json({
@@ -134,7 +143,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Get a single project by ID
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT p.*,
@@ -169,8 +178,18 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, description } = req.body;
 
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ error: 'Project name is required' });
+    // Validate name
+    const nameValidation = validateStringLength(name, 500, false);
+    if (!nameValidation.valid) {
+      return res.status(400).json({ error: nameValidation.error || 'Project name is required' });
+    }
+
+    // Validate description length if provided
+    if (description !== undefined && description !== null) {
+      const descValidation = validateStringLength(description, 5000, true);
+      if (!descValidation.valid) {
+        return res.status(400).json({ error: descValidation.error });
+      }
     }
 
     const result = await pool.query(
@@ -186,12 +205,22 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Update a project
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const { name, description } = req.body;
 
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ error: 'Project name is required' });
+    // Validate name
+    const nameValidation = validateStringLength(name, 500, false);
+    if (!nameValidation.valid) {
+      return res.status(400).json({ error: nameValidation.error || 'Project name is required' });
+    }
+
+    // Validate description length if provided
+    if (description !== undefined && description !== null) {
+      const descValidation = validateStringLength(description, 5000, true);
+      if (!descValidation.valid) {
+        return res.status(400).json({ error: descValidation.error });
+      }
     }
 
     const access = await getProjectAccess(req.params.id, req.userId);
@@ -219,7 +248,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Archive a project
-router.post('/:id/archive', authenticateToken, async (req, res) => {
+router.post('/:id/archive', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -246,7 +275,7 @@ router.post('/:id/archive', authenticateToken, async (req, res) => {
 });
 
 // Unarchive (restore) a project
-router.post('/:id/unarchive', authenticateToken, async (req, res) => {
+router.post('/:id/unarchive', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -273,7 +302,7 @@ router.post('/:id/unarchive', authenticateToken, async (req, res) => {
 });
 
 // Delete a project (permanent deletion)
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -299,7 +328,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/:id/shares', authenticateToken, async (req, res) => {
+router.get('/:id/shares', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -322,7 +351,7 @@ router.get('/:id/shares', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/:id/share-candidates', authenticateToken, async (req, res) => {
+router.get('/:id/share-candidates', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -366,7 +395,7 @@ router.get('/:id/share-candidates', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/:id/shares', authenticateToken, async (req, res) => {
+router.post('/:id/shares', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -429,7 +458,7 @@ router.post('/:id/shares', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/:id/shares/bulk', authenticateToken, async (req, res) => {
+router.post('/:id/shares/bulk', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -519,7 +548,7 @@ router.post('/:id/shares/bulk', authenticateToken, async (req, res) => {
   }
 });
 
-router.delete('/:id/leave', authenticateToken, async (req, res) => {
+router.delete('/:id/leave', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -547,8 +576,12 @@ router.delete('/:id/leave', authenticateToken, async (req, res) => {
   }
 });
 
-router.delete('/:id/shares/:sharedUserId', authenticateToken, async (req, res) => {
+router.delete('/:id/shares/:sharedUserId', authenticateToken, validateProjectId, async (req, res) => {
   try {
+    // Also validate sharedUserId UUID
+    if (!isValidUUID(req.params.sharedUserId)) {
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });
@@ -596,8 +629,12 @@ router.delete('/:id/shares/:sharedUserId', authenticateToken, async (req, res) =
   }
 });
 
-router.patch('/:id/shares/:sharedUserId', authenticateToken, async (req, res) => {
+router.patch('/:id/shares/:sharedUserId', authenticateToken, validateProjectId, async (req, res) => {
   try {
+    // Also validate sharedUserId UUID
+    if (!isValidUUID(req.params.sharedUserId)) {
+      return res.status(400).json({ error: 'Invalid user ID format' });
+    }
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });
@@ -656,7 +693,7 @@ router.patch('/:id/shares/:sharedUserId', authenticateToken, async (req, res) =>
   }
 });
 
-router.post('/:id/transfer-ownership', authenticateToken, async (req, res) => {
+router.post('/:id/transfer-ownership', authenticateToken, validateProjectId, async (req, res) => {
   const client = await pool.connect();
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
@@ -729,7 +766,7 @@ router.post('/:id/transfer-ownership', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/:id/share-links', authenticateToken, async (req, res) => {
+router.get('/:id/share-links', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -753,7 +790,7 @@ router.get('/:id/share-links', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/:id/share-links', authenticateToken, async (req, res) => {
+router.post('/:id/share-links', authenticateToken, validateProjectId, async (req, res) => {
   try {
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
@@ -797,8 +834,12 @@ router.post('/:id/share-links', authenticateToken, async (req, res) => {
   }
 });
 
-router.delete('/:id/share-links/:linkId', authenticateToken, async (req, res) => {
+router.delete('/:id/share-links/:linkId', authenticateToken, validateProjectId, async (req, res) => {
   try {
+    // Also validate linkId UUID
+    if (!isValidUUID(req.params.linkId)) {
+      return res.status(400).json({ error: 'Invalid link ID format' });
+    }
     const access = await getProjectAccess(req.params.id, req.userId);
     if (!access.hasAccess) {
       return res.status(404).json({ error: 'Project not found' });

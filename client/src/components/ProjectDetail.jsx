@@ -158,6 +158,8 @@ function ProjectDetail() {
   }, [shareUsername]);
 
   useEffect(() => {
+    if (!showExportMenu) return;
+
     const handleClickOutside = (event) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) {
         setShowExportMenu(false);
@@ -167,14 +169,11 @@ function ProjectDetail() {
       }
     };
 
-    if (showExportMenu) {
-      setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
-      }, 0);
-    }
+    // Use capture phase for more reliable cleanup
+    document.addEventListener('mousedown', handleClickOutside, true);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside, true);
     };
   }, [showExportMenu]);
 

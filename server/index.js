@@ -67,7 +67,8 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' })); // Limit JSON payloads to 1MB
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -85,10 +86,45 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Database health check route
+const pool = require('./db/connection');
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({ 
+      status: 'healthy',
+      pool: {
+        totalCount: pool.totalCount,
+        idleCount: pool.idleCount,
+        waitingCount: pool.waitingCount
+      }
+    });
+  } catch (error) {
+    res.status(503).json({ status: 'unhealthy', error: error.message });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+  // Log full error for debugging (server-side only)
+  console.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method,
+    userId: req.userId || 'anonymous'
+  });
+  
+  // Don't expose stack traces to clients
+  const statusCode = err.statusCode || err.status || 500;
+  const message = process.env.NODE_ENV === 'development' 
+    ? err.message 
+    : 'An error occurred. Please try again later.';
+    
+  res.status(statusCode).json({ 
+    error: message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 });
 
 const startServer = () => {
