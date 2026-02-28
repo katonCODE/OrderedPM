@@ -9,14 +9,20 @@ const requiresSSL = process.env.DATABASE_URL?.includes('supabase') ||
   process.env.DATABASE_URL?.includes('render.com') ||
   process.env.NODE_ENV === 'production';
 
-const pool = new Pool({
+// Render free tier has connection limits, so use smaller pool
+const isRender = process.env.RENDER || process.env.DATABASE_URL?.includes('render.com');
+const poolConfig = {
   connectionString: process.env.DATABASE_URL,
   ssl: requiresSSL ? { rejectUnauthorized: false } : false,
-  max: 20, // Maximum number of clients in the pool
-  min: 2, // Minimum number of idle clients to keep warm
+  max: isRender ? 5 : 20, // Smaller pool for Render free tier
+  min: isRender ? 0 : 2, // Don't keep idle connections on Render
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 30000, // Return an error after 30 seconds if connection could not be established
-});
+  connectionTimeoutMillis: 60000, // Increased to 60 seconds for cold starts
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000, // Send keep-alive after 10 seconds
+};
+
+const pool = new Pool(poolConfig);
 
 pool.on('connect', () => {
   if (process.env.NODE_ENV === 'development') {
@@ -25,14 +31,15 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle database client', err);
-  // Log to monitoring service (e.g., Sentry) if available
+  // Only log non-timeout errors to avoid noise
+  // Timeout errors are expected on Render during cold starts
+  if (err.code !== 'ETIMEDOUT' && err.message?.includes('timeout') === false) {
+    console.error('Unexpected error on idle database client', err);
+  }
   // Don't exit - let the pool handle reconnection
   // Only exit if it's a critical configuration error
   if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
     console.error('Critical database connection error - check DATABASE_URL');
-    // Consider graceful shutdown with health check endpoint
-    // For now, log and let the application continue
   }
 });
 
