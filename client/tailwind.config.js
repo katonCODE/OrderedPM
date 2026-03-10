@@ -6,6 +6,9 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+      },
       colors: {
         dark: {
           bg: '#1a1a1a',
@@ -21,10 +24,15 @@ export default {
           'from': { transform: 'translateY(20px)', opacity: '0' },
           'to': { transform: 'translateY(0)', opacity: '1' },
         },
+        fadeInUp: {
+          'from': { opacity: '0', transform: 'translateY(16px)' },
+          'to': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         fadeIn: 'fadeIn 0.2s ease-out',
         slideUp: 'slideUp 0.2s ease-out',
+        fadeInUp: 'fadeInUp 0.5s ease-out',
       },
     },
   },

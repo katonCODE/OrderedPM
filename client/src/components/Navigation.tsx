@@ -14,36 +14,31 @@ const Navigation: React.FC = () => {
   };
 
   return (
-    <nav className="relative z-10 px-6 py-4 md:px-12 md:py-6">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <Link to="/" className="text-2xl font-bold text-[#e0e0e0] hover:text-white transition-colors">
-          OrderedPM
+    <nav className="relative z-10 px-6 py-5 md:px-12">
+      <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <Link to="/" className="text-xl font-bold tracking-tight hover:opacity-80 transition-opacity">
+          <span className="text-amber-400">Ordered</span>PM
         </Link>
-        <div className="flex items-center gap-4 md:gap-6">
+        <div className="flex items-center gap-6">
           <Link
             to="/"
-            className={`text-sm md:text-base transition-all hidden md:inline-block ${isActive('/')
-                ? 'text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.6)] font-medium'
-                : 'text-[#e0e0e0] hover:text-white'
-              }`}
+            className={`text-sm font-medium transition-colors hidden md:inline-block ${
+              isActive('/') ? 'text-white' : 'text-gray-400 hover:text-white'
+            }`}
           >
             Home
           </Link>
           <Link
             to="/about"
-            className={`text-sm md:text-base transition-all hidden md:inline-block ${isActive('/about')
-                ? 'text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.6)] font-medium'
-                : 'text-[#e0e0e0] hover:text-white'
-              }`}
+            className={`text-sm font-medium transition-colors hidden md:inline-block ${
+              isActive('/about') ? 'text-white' : 'text-gray-400 hover:text-white'
+            }`}
           >
             About
           </Link>
           <Link
             to="/login"
-            className={`px-4 py-2 md:px-6 md:py-2.5 font-semibold rounded-lg transition-all text-sm md:text-base ${isActive('/login')
-                ? 'bg-white text-[#1a1a1a] drop-shadow-[0_0_12px_rgba(255,255,255,0.6)] shadow-lg'
-                : 'bg-white text-[#1a1a1a] hover:bg-gray-200'
-              }`}
+            className="px-5 py-2 text-sm font-semibold bg-white text-[#1a1a1a] rounded-lg hover:bg-gray-100 transition-colors"
           >
             Login
           </Link>

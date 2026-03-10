@@ -578,9 +578,7 @@ function Dashboard({ onLogout }) {
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-4 md:py-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl md:text-3xl font-bold shrink-0">
-              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                OrderedPM
-              </span>
+              <span className="text-amber-400">Ordered</span>PM
             </h1>
             <div className="hidden sm:block flex-1 max-w-md mx-4 relative z-[120]">
               <GlobalTaskSearch ref={globalSearchRef} />

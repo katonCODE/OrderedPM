@@ -106,137 +106,131 @@ function Login({ onLogin }) {
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
-      {/* Background gradient effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 -left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 -right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
-      </div>
+      {/* Dot grid background */}
+      <div
+        className="fixed inset-0 pointer-events-none opacity-40"
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
+        }}
+      />
+      <div className="fixed inset-0 pointer-events-none bg-gradient-to-b from-[#1a1a1a] via-transparent to-[#1a1a1a]" />
 
-      {/* Navigation Bar */}
       <Navigation />
 
-      {/* Login Card */}
       <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-80px)] px-6 py-12">
-        <div className="relative w-full max-w-md">
-          {/* Glassmorphism Card */}
-          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8 md:p-10 shadow-2xl">
-            {/* Floating effect */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur opacity-50"></div>
+        <div className="w-full max-w-md" style={{ animation: 'fadeInUp 0.4s ease-out' }}>
+          <div className="bg-[#1f2128] border border-white/[0.08] rounded-xl p-8 md:p-10 shadow-2xl shadow-black/40">
+            <h1 className="text-2xl font-bold text-center mb-1">
+              <span className="text-amber-400">Ordered</span>PM
+            </h1>
+            <h2 className="text-lg font-medium text-center mb-8 text-gray-400">
+              {isSignUp ? 'Create your account' : 'Welcome back'}
+            </h2>
 
-            <div className="relative">
-              <h1 className="text-3xl md:text-4xl font-bold text-center mb-2">
-                <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  OrderedPM
-                </span>
-              </h1>
-              <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 text-[#e0e0e0]">
-                {isSignUp ? 'Create Your Account' : 'Sign In'}
-              </h2>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {isSignUp && (
-                  <div>
-                    <label htmlFor="username" className="block text-sm font-medium text-gray-400 mb-2">
-                      Username *
-                    </label>
-                    <input
-                      id="username"
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      required
-                      placeholder="Enter your username"
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                    />
-                  </div>
-                )}
-
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {isSignUp && (
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-400 mb-2">
-                    Email {isSignUp && '*'}
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-400 mb-1.5">
+                    Username
                   </label>
                   <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
-                    placeholder={isSignUp ? "Enter your email address" : "your@email.com"}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                    placeholder="Choose a username"
+                    className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-[#e0e0e0] placeholder-gray-600 focus:outline-none focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/20 transition-all"
                   />
                 </div>
+              )}
 
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-400 mb-1.5">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="you@example.com"
+                  className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-[#e0e0e0] placeholder-gray-600 focus:outline-none focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/20 transition-all"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-400 mb-1.5">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder={isSignUp ? "Min. 6 characters" : "Enter password"}
+                  minLength={6}
+                  className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-[#e0e0e0] placeholder-gray-600 focus:outline-none focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/20 transition-all"
+                />
+              </div>
+
+              {isSignUp && (
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-400 mb-2">
-                    Password {isSignUp && '*'}
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-400 mb-1.5">
+                    Confirm Password
                   </label>
                   <input
-                    id="password"
+                    id="confirmPassword"
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    placeholder={isSignUp ? "Enter your password (min. 6 characters)" : "Enter your password"}
+                    placeholder="Re-enter password"
                     minLength={6}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                    className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-lg text-[#e0e0e0] placeholder-gray-600 focus:outline-none focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/20 transition-all"
                   />
                 </div>
+              )}
 
-                {isSignUp && (
-                  <div>
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-400 mb-2">
-                      Confirm Password *
-                    </label>
-                    <input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                      placeholder="Re-enter your password to confirm"
-                      minLength={6}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                    />
-                  </div>
-                )}
+              {success && (
+                <div className="px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm">
+                  {success}
+                </div>
+              )}
+              {error && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
 
-                {success && (
-                  <div className="px-4 py-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
-                    {success}
-                  </div>
-                )}
-                {error && (
-                  <div className="px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                    {error}
-                  </div>
-                )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-8 py-3.5 bg-amber-400 text-[#1a1a1a] font-semibold rounded-lg hover:bg-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Loading...' : isSignUp ? 'Create Account' : 'Sign In'}
+              </button>
+            </form>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full px-8 py-4 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
-                </button>
-              </form>
-
-              <p className="text-center mt-6 text-sm text-gray-400">
-                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSignUp(!isSignUp);
-                    setError('');
-                    setSuccess('');
-                    setUsername('');
-                    setConfirmPassword('');
-                  }}
-                  className="text-blue-400 hover:text-blue-300 underline font-medium"
-                >
-                  {isSignUp ? 'Sign In' : 'Sign Up'}
-                </button>
-              </p>
-            </div>
+            <p className="text-center mt-6 text-sm text-gray-500">
+              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setError('');
+                  setSuccess('');
+                  setUsername('');
+                  setConfirmPassword('');
+                }}
+                className="text-amber-400 hover:text-amber-300 font-medium"
+              >
+                {isSignUp ? 'Sign In' : 'Sign Up'}
+              </button>
+            </p>
           </div>
         </div>
       </div>

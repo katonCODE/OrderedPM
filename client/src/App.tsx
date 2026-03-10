@@ -117,12 +117,14 @@ function App() {
   if (loading) {
     return (
       <div className="loading-screen">
+        <div className="loading-brand">
+          <span className="loading-brand-accent">Ordered</span>PM
+        </div>
         <div className="loading-animation">
           <div className="loading-dot"></div>
           <div className="loading-dot"></div>
           <div className="loading-dot"></div>
         </div>
-        <p className="loading-text">Loading...</p>
       </div>
     );
   }
