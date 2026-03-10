@@ -29,6 +29,25 @@ function KanbanBoard({
     return order[priority] || 4; // Default to end if priority is null/undefined
   };
 
+  const getTitleFontSize = (title) => {
+    if (!title) return 16;
+    const length = title.length;
+    // Scale from 18px (short) down to 12px (long), with caps
+    // Formula: max(12, min(18, 18 - (length - 20) * 0.15))
+    // This gives: 0-20 chars = 18px, 20-60 chars = scales down, 60+ chars = 12px minimum
+    const maxSize = 18;
+    const minSize = 12;
+    const scalingStart = 20;
+    const scalingFactor = 0.15;
+    
+    if (length <= scalingStart) {
+      return maxSize;
+    }
+    
+    const calculatedSize = maxSize - (length - scalingStart) * scalingFactor;
+    return Math.max(minSize, Math.min(maxSize, calculatedSize));
+  };
+
   const getTasksForColumn = (status) => {
     let filtered = tasks.filter(task => task.status === status);
 
@@ -248,7 +267,7 @@ function KanbanBoard({
         }
       `}</style>
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[600px]">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[600px] w-full">
           {columns.map((column) => {
             const columnTasks = getTasksForColumn(column.status);
 
@@ -309,7 +328,15 @@ function KanbanBoard({
                                   className={`cursor-pointer ${canReorder ? 'pl-8' : ''}`}
                                 >
                                   <div className="flex justify-between items-start gap-2 mb-2">
-                                    <h4 className="text-base font-semibold text-[#e0e0e0] flex-1 leading-tight">{task.title}</h4>
+                                    <div className="min-w-0 flex-1">
+                                      <h4 
+                                        className="font-semibold text-[#e0e0e0] leading-tight line-clamp-2" 
+                                        style={{ fontSize: `${getTitleFontSize(task.title)}px` }}
+                                        title={task.title}
+                                      >
+                                        {task.title}
+                                      </h4>
+                                    </div>
                                     {(canEdit || canDelete) && (
                                       <div className="flex gap-1 flex-shrink-0">
                                         {canEdit && (

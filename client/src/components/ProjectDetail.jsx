@@ -1261,7 +1261,7 @@ function ProjectDetail() {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
+      <main className="relative z-0 px-5 py-8 md:py-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0]">Mission Control</h2>
           {canManageTasks && (
@@ -1471,7 +1471,7 @@ function ProjectDetail() {
                   onTaskClick={handleTaskClick}
                 />
               </aside>
-              <div className="min-h-[600px]">
+              <div className="min-h-[600px] w-full">
                 <KanbanBoard
                   tasks={tasks}
                   onStatusChange={handleStatusChange}
