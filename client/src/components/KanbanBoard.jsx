@@ -247,32 +247,13 @@ function KanbanBoard({
 
   return (
     <>
-      <style>{`
-        /* Custom drag preview styling for @hello-pangea/dnd */
-        [data-rbd-drag-handle-draggable-id] {
-          cursor: grab !important;
-        }
-        [data-rbd-drag-handle-draggable-id]:active {
-          cursor: grabbing !important;
-        }
-        
-        /* Style the drag preview portal */
-        [data-rbd-drag-handle-context-id] > div {
-          transform: rotate(2deg) scale(1.05) !important;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(74, 158, 255, 0.6) !important;
-          opacity: 0.98 !important;
-          backdrop-filter: blur(12px) !important;
-          background: rgba(255, 255, 255, 0.1) !important;
-          border: 2px solid rgba(74, 158, 255, 0.6) !important;
-        }
-      `}</style>
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[600px] w-full">
           {columns.map((column) => {
             const columnTasks = getTasksForColumn(column.status);
 
             return (
-              <div key={column.id} className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col min-h-full transition-all">
+              <div key={column.id} className="relative bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col min-h-full transition-all">
                 <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
                   <h3 className="text-lg font-semibold text-[#e0e0e0]">{column.title}</h3>
                   <span className="px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-semibold text-[#e0e0e0]">
@@ -303,29 +284,40 @@ function KanbanBoard({
                               <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
+                                {...(canReorder ? provided.dragHandleProps : {})}
                                 style={{
                                   ...provided.draggableProps.style,
                                   ...(snapshot.isDragging && {
-                                    opacity: 0.4,
+                                    zIndex: 99999,
                                   }),
                                 }}
                                 className={`relative backdrop-blur-sm bg-white/5 border border-white/10 rounded-lg p-4 mb-3 transition-all hover:bg-white/10 hover:shadow-lg ${snapshot.isDragging
                                   ? 'shadow-2xl'
                                   : ''
-                                  }`}
+                                  } ${canReorder ? 'cursor-grab active:cursor-grabbing' : ''}`}
                               >
                                 {canReorder && (
                                   <div
-                                    {...provided.dragHandleProps}
-                                    className="absolute top-2 left-2 w-6 h-6 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 hover:text-gray-400"
+                                    className="absolute top-2 left-2 w-6 h-6 pointer-events-none flex items-center justify-center text-gray-500"
                                     title="Drag to reorder"
                                   >
                                     ⋮⋮
                                   </div>
                                 )}
                                 <div
-                                  onClick={() => onTaskClick && onTaskClick(task)}
+                                  onClick={(e) => {
+                                    // Prevent task click if we're dragging
+                                    if (snapshot.isDragging) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      return;
+                                    }
+                                    if (onTaskClick) {
+                                      onTaskClick(task);
+                                    }
+                                  }}
                                   className={`cursor-pointer ${canReorder ? 'pl-8' : ''}`}
+                                  style={{ pointerEvents: snapshot.isDragging ? 'none' : 'auto' }}
                                 >
                                   <div className="flex justify-between items-start gap-2 mb-2">
                                     <div className="min-w-0 flex-1">
@@ -463,15 +455,7 @@ function KanbanBoard({
                           </Draggable>
                         ))
                       )}
-                      {provided.placeholder && (
-                        <div
-                          className={`rounded-lg border-2 border-dashed border-blue-500/40 bg-blue-500/10 mb-3 transition-all duration-200 ${snapshot.isDraggingOver ? 'min-h-[80px]' : 'h-0 border-transparent bg-transparent'
-                            }`}
-                          style={{
-                            minHeight: snapshot.isDraggingOver ? '80px' : '0',
-                          }}
-                        />
-                      )}
+                      {provided.placeholder}
                     </div>
                   )}
                 </Droppable>

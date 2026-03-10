@@ -33,23 +33,11 @@ code {
   }
 }
 
-/* Enhanced drag and drop styling for @hello-pangea/dnd */
+/* Drag handle cursor styling for @hello-pangea/dnd */
 [data-rbd-drag-handle-draggable-id] {
   cursor: grab !important;
 }
 
 [data-rbd-drag-handle-draggable-id]:active {
   cursor: grabbing !important;
-}
-
-/* Style the drag preview that follows the cursor */
-[data-rbd-drag-handle-context-id]>div,
-[data-rbd-drag-handle-context-id]>div>div {
-  transform: rotate(2deg) scale(1.05) !important;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(74, 158, 255, 0.6) !important;
-  opacity: 0.98 !important;
-  backdrop-filter: blur(12px) !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-  border: 2px solid rgba(74, 158, 255, 0.6) !important;
-  pointer-events: none !important;
 }
