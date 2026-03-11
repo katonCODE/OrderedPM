@@ -43,15 +43,15 @@ function MiniCalendar({ tasks, onDateClick, selectedDate }) {
       const dateTime = new Date(date);
       dateTime.setHours(0, 0, 0, 0);
       if (datesWithTasks.has(dateTime.getTime())) {
-        return <div className="w-1 h-1 bg-blue-400 rounded-full mx-auto mt-1" />;
+        return <div className="mx-auto mt-1 h-1 w-1 rounded-full bg-[#d4af37]" />;
       }
     }
     return null;
   };
 
   return (
-    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4">
-      <h3 className="text-lg font-semibold text-[#e0e0e0] mb-4">Calendar</h3>
+    <div className="dashboard-sketch-card dashboard-panel relative rounded-[18px] p-4">
+      <h3 className="dashboard-geometric mb-4 text-lg font-semibold text-[#d4af37]">Calendar</h3>
       <style>{`
         .react-calendar-custom {
           width: 100%;
@@ -63,31 +63,31 @@ function MiniCalendar({ tasks, onDateClick, selectedDate }) {
           display: flex;
           height: 44px;
           margin-bottom: 1em;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid rgba(212, 175, 55, 0.1);
         }
         .react-calendar__navigation button {
           min-width: 44px;
           background: none;
           font-size: 16px;
           margin-top: 8px;
-          color: #e0e0e0;
+          color: #efe5cf;
           border: none;
           cursor: pointer;
         }
         .react-calendar__navigation button:enabled:hover,
         .react-calendar__navigation button:enabled:focus {
-          background-color: rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
+          background-color: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
         }
         .react-calendar__navigation button[disabled] {
-          color: #505050;
+          color: #6f675b;
         }
         .react-calendar__month-view__weekdays {
           text-align: center;
           text-transform: uppercase;
           font-weight: 600;
           font-size: 0.75em;
-          color: #b0b0b0;
+          color: #8f8779;
           margin-bottom: 0.5em;
         }
         .react-calendar__month-view__weekdays__weekday {
@@ -100,36 +100,37 @@ function MiniCalendar({ tasks, onDateClick, selectedDate }) {
         }
         .react-calendar__tile {
           max-width: 100%;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(222, 209, 175, 0.1);
+          border-radius: 10px;
           padding: 0.75em 0.5em;
           text-align: center;
-          color: #e0e0e0;
+          color: #efe5cf;
           font-size: 0.833em;
           cursor: pointer;
         }
         .react-calendar__tile:enabled:hover,
         .react-calendar__tile:enabled:focus {
-          background-color: rgba(255, 255, 255, 0.1);
+          background-color: rgba(255, 255, 255, 0.05);
         }
         .react-calendar__tile--now {
-          background: rgba(74, 158, 255, 0.2);
-          border-color: rgba(74, 158, 255, 0.3);
+          background: rgba(212, 175, 55, 0.08);
+          border-color: rgba(212, 175, 55, 0.2);
         }
         .react-calendar__tile--active {
-          background: rgba(74, 158, 255, 0.3);
-          border-color: rgba(74, 158, 255, 0.5);
+          background: rgba(212, 175, 55, 0.14);
+          border-color: rgba(212, 175, 55, 0.35);
         }
         .react-calendar__tile.has-tasks {
-          border-color: rgba(74, 158, 255, 0.4);
+          border-color: rgba(212, 175, 55, 0.22);
         }
         .react-calendar__tile.selected-date {
-          background: rgba(74, 158, 255, 0.4);
-          border-color: rgba(74, 158, 255, 0.6);
+          background: rgba(212, 175, 55, 0.14);
+          border-color: rgba(212, 175, 55, 0.38);
+          color: #f7ecd0;
         }
         .react-calendar__tile--neighboringMonth {
-          color: #666;
+          color: #6f675b;
         }
       `}</style>
       <Calendar
@@ -142,7 +143,7 @@ function MiniCalendar({ tasks, onDateClick, selectedDate }) {
       {selectedDate && (
         <button
           onClick={() => onDateClick(null)}
-          className="mt-4 w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-sm text-[#e0e0e0] font-medium"
+          className="dashboard-secondary-button mt-4 w-full px-4"
         >
           Clear Filter
         </button>

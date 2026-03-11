@@ -253,10 +253,10 @@ function KanbanBoard({
             const columnTasks = getTasksForColumn(column.status);
 
             return (
-              <div key={column.id} className="relative bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col min-h-full transition-all">
-                <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
-                  <h3 className="text-lg font-semibold text-[#e0e0e0]">{column.title}</h3>
-                  <span className="px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-semibold text-[#e0e0e0]">
+              <div key={column.id} className="dashboard-sketch-card dashboard-panel relative flex min-h-full flex-col p-4 transition-colors">
+                <div className="mb-4 flex items-center justify-between border-b border-[#d4af37]/10 pb-3">
+                  <h3 className="dashboard-geometric text-lg font-semibold text-[#d4af37]">{column.title}</h3>
+                  <span className="dashboard-pill border border-[#d4af37]/20 bg-[#d4af37]/10 px-3 py-1 text-xs font-semibold text-[#f0d792]">
                     {columnTasks.length}
                   </span>
                 </div>
@@ -266,14 +266,14 @@ function KanbanBoard({
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`flex-1 overflow-y-auto min-h-0 pr-1 transition-all duration-200 ${snapshot.isDraggingOver
-                        ? 'bg-blue-500/20 border-2 border-blue-500/60 border-dashed rounded-lg p-2'
+                        ? 'rounded-[14px] border-2 border-dashed border-[#d4af37]/50 bg-[rgba(212,175,55,0.08)] p-2'
                         : ''
                         }`}
                     >
                       {columnTasks.length === 0 ? (
                         <div className={`text-center text-sm py-8 transition-all ${snapshot.isDraggingOver
-                          ? 'text-blue-400 font-medium'
-                          : 'text-gray-500'
+                          ? 'font-medium text-[#f0d792]'
+                          : 'text-[#8f8779]'
                           }`}>
                           {snapshot.isDraggingOver ? 'Drop task here' : 'No tasks'}
                         </div>
@@ -291,14 +291,14 @@ function KanbanBoard({
                                     zIndex: 99999,
                                   }),
                                 }}
-                                className={`relative backdrop-blur-sm bg-white/5 border border-white/10 rounded-lg p-4 mb-3 transition-all hover:bg-white/10 hover:shadow-lg ${snapshot.isDragging
+                                className={`dashboard-sketch-card relative mb-3 rounded-[16px] p-4 transition-colors hover:bg-white/[0.05] ${snapshot.isDragging
                                   ? 'shadow-2xl'
                                   : ''
                                   } ${canReorder ? 'cursor-grab active:cursor-grabbing' : ''}`}
                               >
                                 {canReorder && (
                                   <div
-                                    className="absolute top-2 left-2 w-6 h-6 pointer-events-none flex items-center justify-center text-gray-500"
+                                    className="pointer-events-none absolute left-2 top-2 flex h-6 w-6 items-center justify-center text-[#6f675b]"
                                     title="Drag to reorder"
                                   >
                                     ⋮⋮
@@ -322,7 +322,7 @@ function KanbanBoard({
                                   <div className="flex justify-between items-start gap-2 mb-2">
                                     <div className="min-w-0 flex-1">
                                       <h4 
-                                        className="font-semibold text-[#e0e0e0] leading-tight line-clamp-2" 
+                                        className="dashboard-geometric leading-tight line-clamp-2 font-semibold text-[#efe5cf]" 
                                         style={{ fontSize: `${getTitleFontSize(task.title)}px` }}
                                         title={task.title}
                                       >
@@ -337,7 +337,7 @@ function KanbanBoard({
                                               e.stopPropagation();
                                               onEdit(task);
                                             }}
-                                            className="p-1.5 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
+                                            className="dashboard-icon-button h-8 w-8 rounded-[10px] p-0 text-sm"
                                             title="Edit"
                                           >
                                             ✏️
@@ -349,7 +349,7 @@ function KanbanBoard({
                                               e.stopPropagation();
                                               onDelete(task.id);
                                             }}
-                                            className="p-1.5 bg-white/5 border border-red-500/20 rounded hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                                            className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-red-400/20 bg-white/[0.03] text-sm text-[#c7ba9f] transition-colors hover:bg-red-500/10 hover:text-red-300"
                                             title="Delete"
                                           >
                                             🗑️
@@ -359,21 +359,22 @@ function KanbanBoard({
                                     )}
                                   </div>
                                   {task.description && (
-                                    <p className="text-sm text-gray-400 mb-3 line-clamp-2">{task.description}</p>
+                                    <p className="mb-3 line-clamp-2 text-sm text-[#b9ae99]">{task.description}</p>
                                   )}
                                   {task.total_subtasks > 0 && (
                                     <div className="mb-3">
                                       <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs text-gray-400">Subtasks</span>
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-[#b9ae99]">Subtasks</span>
+                                        <span className="text-xs text-[#8f8779]">
                                           {task.completed_subtasks || 0}/{task.total_subtasks}
                                         </span>
                                       </div>
-                                      <div className="w-full bg-white/5 rounded-full h-1.5">
+                                      <div className="dashboard-progress-track w-full">
                                         <div
-                                          className="bg-gradient-to-r from-blue-400 to-blue-500 h-1.5 rounded-full transition-all duration-300"
+                                          className="dashboard-progress-fill dashboard-progress-fill--marker h-1.5 transition-all duration-300"
                                           style={{
                                             width: `${((task.completed_subtasks || 0) / task.total_subtasks) * 100}%`,
+                                            '--progress-hue': '44',
                                           }}
                                         />
                                       </div>
@@ -381,37 +382,37 @@ function KanbanBoard({
                                   )}
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {task.due_date && (
-                                      <span className="text-xs text-gray-500">
+                                      <span className="text-xs text-[#8f8779]">
                                         Due {new Date(task.due_date).toLocaleDateString()}
                                       </span>
                                     )}
                                     {task.estimated_minutes && (
-                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                      <span className="rounded px-2 py-0.5 text-xs font-medium border border-emerald-400/20 bg-emerald-500/10 text-emerald-300">
                                         {task.estimated_minutes} min
                                       </span>
                                     )}
                                     {task.priority && (
-                                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${task.priority === 'high'
-                                        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${task.priority === 'high'
+                                        ? 'border border-red-400/20 bg-red-500/10 text-red-300'
                                         : task.priority === 'medium'
-                                          ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                                          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                          ? 'border border-[#d4af37]/20 bg-[#d4af37]/10 text-[#f0d792]'
+                                          : 'border border-slate-400/20 bg-slate-500/10 text-slate-300'
                                         }`}>
                                         {formatPriority(task.priority)}
                                       </span>
                                     )}
                                     {task.recurrence_type && (
-                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                      <span className="rounded border border-[#d4af37]/20 bg-white/[0.04] px-2 py-0.5 text-xs font-medium text-[#d1c5af]">
                                         {formatRecurrence(task)}
                                       </span>
                                     )}
                                     {task.blocked_by_count > 0 && (
-                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                                      <span className="rounded border border-orange-400/20 bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-300">
                                         Blocked by {task.blocked_by_count}
                                       </span>
                                     )}
                                     {task.blocking_count > 0 && (
-                                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                                      <span className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs font-medium text-[#b9ae99]">
                                         Blocking {task.blocking_count}
                                       </span>
                                     )}
@@ -421,31 +422,31 @@ function KanbanBoard({
                                       {task.tags.slice(0, 3).map((tag, index) => (
                                         <span
                                           key={index}
-                                          className="inline-block px-2 py-0.5 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300"
+                                          className="inline-block rounded border border-[#d4af37]/20 bg-[#d4af37]/10 px-2 py-0.5 text-xs text-[#f0d792]"
                                         >
                                           {tag}
                                         </span>
                                       ))}
                                       {task.tags.length > 3 && (
-                                        <span className="inline-block px-2 py-0.5 bg-gray-500/20 border border-gray-500/30 rounded text-xs text-gray-400">
+                                        <span className="inline-block rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-[#8f8779]">
                                           +{task.tags.length - 3}
                                         </span>
                                       )}
                                     </div>
                                   )}
-                                  <div className="mt-3 pt-2 border-t border-white/10 flex items-center gap-2">
+                                  <div className="mt-3 flex items-center gap-2 border-t border-[#d4af37]/10 pt-2">
                                     {task.creator_avatar_url ? (
                                       <img
                                         src={task.creator_avatar_url}
                                         alt={getCreatorName(task)}
-                                        className="w-5 h-5 rounded-full object-cover border border-white/20"
+                                        className="h-5 w-5 rounded-full border border-[#d4af37]/20 object-cover"
                                       />
                                     ) : (
-                                      <div className="w-5 h-5 rounded-full bg-white/10 border border-white/20 text-[10px] text-gray-300 flex items-center justify-center font-semibold">
+                                      <div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#d4af37]/20 bg-white/[0.05] text-[10px] font-semibold text-[#d1c5af]">
                                         {getCreatorInitials(task)}
                                       </div>
                                     )}
-                                    <span className="text-xs text-gray-400 truncate">
+                                    <span className="truncate text-xs text-[#b9ae99]">
                                       {getCreatorName(task)}
                                     </span>
                                   </div>

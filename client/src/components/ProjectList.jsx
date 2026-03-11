@@ -13,6 +13,14 @@ function ProjectList({
   sectionTitle = '',
   showArchived = false
 }) {
+  const getProgressStyle = (completionRate) => {
+    const hue = Math.round((Math.max(0, Math.min(100, completionRate)) / 100) * 120);
+    return {
+      width: `${completionRate}%`,
+      '--progress-hue': `${hue}`,
+    };
+  };
+
   const getProjectStats = (projectId) => {
     const projectTasks = allTasks.filter(t => t.project_id === projectId);
     const totalTasks = projectTasks.length;
@@ -33,7 +41,7 @@ function ProjectList({
 
   if (projects.length === 0) {
     return (
-      <div className="text-center py-20 text-gray-400 text-lg">
+      <div className="dashboard-geometric text-center py-20 text-[#b9ae99] text-lg">
         <p>
           {sectionTitle ? `${sectionTitle}: ` : ''}
           No projects found. {allTasks.length === 0 ? 'Create your first project to get started!' : 'Try adjusting your search or filters.'}
@@ -52,42 +60,40 @@ function ProjectList({
         return (
           <div
             key={project.id}
-            className={`relative backdrop-blur-xl bg-white/5 border rounded-xl p-6 hover:bg-white/10 transition-all group ${project.archived
-              ? 'border-gray-600/30 opacity-75'
-              : 'border-white/10'
+            className={`dashboard-sketch-card dashboard-panel relative p-6 transition-colors group ${project.archived
+              ? 'opacity-75'
+              : 'hover:bg-white/[0.045]'
               }`}
           >
             {project.archived && (
-              <div className="absolute top-3 right-3 px-2 py-1 bg-gray-500/20 border border-gray-500/30 rounded text-xs text-gray-400 font-medium">
+              <div className="dashboard-pill dashboard-pill--archived absolute top-3 right-3">
                 Archived
               </div>
             )}
             {!project.archived && (
               <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
                 {!isOwner && (
-                  <div className="px-2 py-1 bg-blue-500/20 border border-blue-500/30 rounded text-xs text-blue-300 font-medium capitalize">
+                  <div className="dashboard-pill dashboard-pill--shared capitalize">
                     Shared ({project.permission_level || 'viewer'})
                   </div>
                 )}
                 {stats.overdueTasks > 0 && (
-                  <div className="px-2 py-1 bg-red-500/20 border border-red-500/30 rounded text-xs text-red-400 font-medium">
+                  <div className="dashboard-pill dashboard-pill--danger">
                     {stats.overdueTasks} overdue
                   </div>
                 )}
               </div>
             )}
 
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-xl blur opacity-0 group-hover:opacity-50 transition-opacity"></div>
-
             <div className="relative">
               <div className="flex justify-between items-start gap-4 mb-4">
                 <div className="flex-1 min-w-0">
                   <Link to={`/project/${project.id}`} className="block">
-                    <h3 className="text-xl font-semibold text-[#e0e0e0] mb-2 hover:text-white transition-colors truncate">
+                    <h3 className="dashboard-geometric text-xl font-semibold text-[#efe5cf] mb-2 hover:text-[#f7ecd0] transition-colors truncate">
                       {project.name}
                     </h3>
                     {project.description && (
-                      <p className="text-sm text-gray-400 mb-3 line-clamp-2">
+                      <p className="text-sm text-[#b9ae99] mb-3 line-clamp-2">
                         {project.description}
                       </p>
                     )}
@@ -98,7 +104,7 @@ function ProjectList({
                     <>
                       <button
                         onClick={() => onEdit(project)}
-                        className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-gray-400 hover:text-[#e0e0e0]"
+                        className="dashboard-icon-button"
                         title="Edit"
                       >
                         ✏️
@@ -106,7 +112,7 @@ function ProjectList({
                       {onArchive && (
                         <button
                           onClick={() => onArchive(project.id)}
-                          className="p-2 bg-white/5 border border-yellow-500/20 rounded-lg hover:bg-yellow-500/10 transition-all text-gray-400 hover:text-yellow-400"
+                          className="dashboard-icon-button"
                           title="Archive"
                         >
                           📦
@@ -114,7 +120,7 @@ function ProjectList({
                       )}
                       <button
                         onClick={() => onDelete(project.id)}
-                        className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                        className="dashboard-icon-button"
                         title="Delete"
                       >
                         🗑️
@@ -125,14 +131,14 @@ function ProjectList({
                     <>
                       <button
                         onClick={() => onRestore(project.id)}
-                        className="p-2 bg-white/5 border border-green-500/20 rounded-lg hover:bg-green-500/10 transition-all text-gray-400 hover:text-green-400"
+                        className="dashboard-icon-button"
                         title="Restore"
                       >
                         ♻️
                       </button>
                       <button
                         onClick={() => onDelete(project.id)}
-                        className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                        className="dashboard-icon-button"
                         title="Delete Permanently"
                       >
                         🗑️
@@ -142,7 +148,7 @@ function ProjectList({
                   {!project.archived && !isOwner && onLeave && (
                     <button
                       onClick={() => onLeave(project)}
-                      className="p-2 bg-white/5 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition-all text-gray-400 hover:text-red-400"
+                      className="dashboard-icon-button"
                       title="Leave Project"
                     >
                       🚪
@@ -155,26 +161,26 @@ function ProjectList({
                 {stats.totalTasks > 0 && (
                   <div>
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs text-gray-400">Progress</span>
-                      <span className="text-xs font-medium text-[#e0e0e0]">{stats.completionRate}%</span>
+                      <span className="dashboard-geometric text-xs text-[#b9ae99]">Progress</span>
+                      <span className="dashboard-geometric text-xs font-medium text-[#efe5cf]">{stats.completionRate}%</span>
                     </div>
-                    <div className="w-full bg-white/5 rounded-full h-2">
+                    <div className="dashboard-progress-track w-full">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
-                        style={{ width: `${stats.completionRate}%` }}
+                        className="dashboard-progress-fill dashboard-progress-fill--marker transition-all"
+                        style={getProgressStyle(stats.completionRate)}
                       />
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-4 text-gray-400">
+                  <div className="flex items-center gap-4 text-[#b9ae99]">
                     <span>{stats.totalTasks} {stats.totalTasks === 1 ? 'task' : 'tasks'}</span>
                     {stats.totalTasks > 0 && (
-                      <span className="text-green-400">{stats.doneTasks} done</span>
+                      <span className="text-[#8fd6a3]">{stats.doneTasks} done</span>
                     )}
                   </div>
-                  <div className="text-gray-500">
+                  <div className="text-[#8f8779]">
                     Updated {new Date(lastUpdated).toLocaleDateString()}
                   </div>
                 </div>

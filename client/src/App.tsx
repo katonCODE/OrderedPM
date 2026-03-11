@@ -132,7 +132,7 @@ function App() {
   return (
     <ErrorBoundary>
       <Router>
-        <div className="App">
+        <div className="App min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
           <Routes>
           <Route
             path="/login"

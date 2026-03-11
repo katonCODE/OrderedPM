@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectsAPI, tasksAPI } from '../services/api';
 import { getMyProfile } from '../services/profile';
 import { exportAllData } from '../utils/export';
-import { parseJSONFile, parseCSVFile, extractProjectsFromJSON, extractProjectsFromCSV, extractTasksFromJSON, extractTasksFromCSV, validateProjectData, validateTaskData } from '../utils/import';
+import { parseJSONFile, parseCSVFile, extractProjectsFromJSON, extractProjectsFromCSV, extractTasksFromJSON, validateProjectData, validateTaskData } from '../utils/import';
 import ProjectList from './ProjectList';
 import ProjectForm from './ProjectForm';
 import ConfirmDialog from './ConfirmDialog';
@@ -16,6 +16,44 @@ import { ProjectCardSkeleton, StatsSkeleton } from './SkeletonLoader';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { useRealtimeSubscription } from '../hooks/useRealtimeSubscription';
 import './Dashboard.css';
+
+const SketchUnderline = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 240 18"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+    className={`dashboard-sketch-line ${className}`}
+  >
+    <path
+      d="M4 10c36 6 67 2 101 0 42-3 79-5 131-1"
+      stroke="#D4AF37"
+      strokeWidth="6"
+      strokeLinecap="round"
+      fill="none"
+      opacity="0.68"
+    />
+  </svg>
+);
+
+const BrandWordmark = ({ className = '' }) => (
+  <span className={`dashboard-wordmark ${className}`}>
+    <span className="dashboard-wordmark-text">OrderedPM</span>
+    <SketchUnderline className="dashboard-wordmark-line" />
+  </span>
+);
+
+const SectionHeading = ({ as: Tag = 'h2', className = '', children }) => (
+  <div className={`dashboard-section-title ${className}`}>
+    <Tag className="dashboard-section-title-text">{children}</Tag>
+  </div>
+);
+
+const CollaborationCardHeading = ({ children }) => (
+  <div className="dashboard-collab-heading">
+    <h3 className="dashboard-section-title-text">{children}</h3>
+    <SketchUnderline className="dashboard-collab-heading-line" />
+  </div>
+);
 
 function Dashboard({ onLogout }) {
   const navigate = useNavigate();
@@ -40,12 +78,14 @@ function Dashboard({ onLogout }) {
   const [todayPlanError, setTodayPlanError] = useState('');
   const [todayPlanSuccess, setTodayPlanSuccess] = useState('');
   const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState('');
-  const [importSuccess, setImportSuccess] = useState('');
+  const [exportingFormat, setExportingFormat] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [actionSuccess, setActionSuccess] = useState('');
   const [shareLinkInput, setShareLinkInput] = useState('');
   const [joiningShareLink, setJoiningShareLink] = useState(false);
-  const searchInputRef = useRef(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const globalSearchRef = useRef(null);
+  const importInputRef = useRef(null);
   const itemsPerPage = 15;
 
   const { data: profile } = useQuery({
@@ -236,6 +276,7 @@ function Dashboard({ onLogout }) {
       activeProjectIds.has(task.project_id)
     );
   }, [allTasks, activeProjectsForQuickAdd]);
+
   const toggleTodayPin = (taskId) => {
     setTodayPlanPinnedTaskIds((prev) =>
       prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
@@ -253,6 +294,7 @@ function Dashboard({ onLogout }) {
     const budget = Math.max(1, Number(todayPlanTimeBudget) || 120);
     setTodayPlanError('');
     setTodayPlanSuccess('');
+
     if (save) {
       setTodayPlanSaving(true);
     } else {
@@ -286,6 +328,18 @@ function Dashboard({ onLogout }) {
       setCurrentPage(1);
     }
   }, [totalPages, currentPage]);
+
+  useEffect(() => {
+    if (!actionSuccess) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setActionSuccess('');
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [actionSuccess]);
 
   useEffect(() => {
     if (activeTab === 'today' && !hasCompletableTasks) {
@@ -430,9 +484,10 @@ function Dashboard({ onLogout }) {
   }, [showForm, showQuickAddForm]);
 
   const handleImportFile = async (file) => {
+    setIsDragOver(false);
     setImporting(true);
-    setImportError('');
-    setImportSuccess('');
+    setActionError('');
+    setActionSuccess('');
 
     try {
       const isJSON = file.name.endsWith('.json');
@@ -468,12 +523,14 @@ function Dashboard({ onLogout }) {
 
       let createdCount = 0;
       let taskCount = 0;
+      const createdProjectNames = [];
 
       for (const projectData of projects) {
         try {
           const validatedProject = validateProjectData(projectData);
           const newProject = await projectsAPI.create(validatedProject);
           createdCount++;
+          createdProjectNames.push(newProject?.name || validatedProject.name);
 
           if (isJSON && tasksData) {
             const projectTasks = extractTasksFromJSON(tasksData, newProject.id, projectData.name);
@@ -496,13 +553,14 @@ function Dashboard({ onLogout }) {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
       setCurrentPage(1);
-      setImportSuccess(`Successfully imported ${createdCount} project(s)${taskCount > 0 ? ` with ${taskCount} task(s)` : ''}!`);
-
-      setTimeout(() => {
-        setImportSuccess('');
-      }, 5000);
+      setActiveTab('projects');
+      const taskSummary = taskCount > 0 ? ` with ${taskCount} task${taskCount === 1 ? '' : 's'}` : '';
+      const successMessage = createdCount === 1
+        ? `Success! "${createdProjectNames[0]}" has been added to your dashboard${taskSummary}.`
+        : `Success! ${createdCount} projects have been added to your dashboard${taskSummary}.`;
+      setActionSuccess(successMessage);
     } catch (error) {
-      setImportError(error.message || 'Failed to import file. Please check the file format.');
+      setActionError(error.message || 'Failed to import file. Please check the file format.');
     } finally {
       setImporting(false);
     }
@@ -542,43 +600,89 @@ function Dashboard({ onLogout }) {
   const handleJoinSharedProject = async () => {
     const token = parseShareToken(shareLinkInput);
     if (!token) {
-      setImportError('Enter a share URL or token');
+      setActionError('Enter a share URL or token');
       return;
     }
 
     setJoiningShareLink(true);
-    setImportError('');
-    setImportSuccess('');
+    setActionError('');
+    setActionSuccess('');
     try {
       const result = await projectsAPI.redeemShareLink(token);
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
-      setImportSuccess('Joined shared project successfully.');
-      setShareLinkInput('');
+      let joinedProjectName = '';
       if (result?.project_id) {
-        navigate(`/project/${result.project_id}`);
+        try {
+          const projectResponse = await projectsAPI.getById(result.project_id);
+          joinedProjectName = projectResponse?.data?.name || projectResponse?.name || '';
+        } catch (projectError) {
+          joinedProjectName = '';
+        }
       }
+      setActionSuccess(
+        joinedProjectName
+          ? `Success! "${joinedProjectName}" has been added to your dashboard.`
+          : 'Success! Shared project has been added to your dashboard.'
+      );
+      setShareLinkInput('');
+      setCurrentPage(1);
+      setActiveTab('projects');
     } catch (error) {
-      setImportError(error.message || 'Failed to join shared project');
+      setActionError(error.message || 'Failed to join shared project');
     } finally {
       setJoiningShareLink(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#1a1a1a] text-[#e0e0e0]">
-      {/* Background gradient effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 -left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 -right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
-      </div>
+  const handleExportData = async (format) => {
+    if (!allProjects.length) {
+      setActionError('Create at least one project before exporting.');
+      return;
+    }
 
-      {/* Header */}
-      <header className="relative z-40 backdrop-blur-xl bg-white/5 border-b border-white/10">
+    setExportingFormat(format);
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      exportAllData(allProjects, allTasks, format);
+      setActionSuccess(`Success! Your ${format.toUpperCase()} export is downloading.`);
+    } catch (error) {
+      setActionError(error.message || `Failed to export ${format.toUpperCase()} data.`);
+    } finally {
+      window.setTimeout(() => {
+        setExportingFormat('');
+      }, 600);
+    }
+  };
+
+  const handleImportDrop = (event) => {
+    event.preventDefault();
+    if (importing) {
+      return;
+    }
+
+    setIsDragOver(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      handleImportFile(file);
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    if (!importing) {
+      importInputRef.current?.click();
+    }
+  };
+
+  return (
+    <div className="dashboard-shell min-h-screen text-[#efe5cf]">
+      <header className="dashboard-header-shell relative z-40">
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-4 md:py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl md:text-3xl font-bold shrink-0">
-              <span className="text-amber-400">Ordered</span>PM
+            <h1 className="text-2xl md:text-3xl shrink-0 leading-none">
+              <BrandWordmark />
             </h1>
             <div className="hidden sm:block flex-1 max-w-md mx-4 relative z-[120]">
               <GlobalTaskSearch ref={globalSearchRef} />
@@ -587,28 +691,29 @@ function Dashboard({ onLogout }) {
               {profile && (
                 <button
                   onClick={handleProfileClick}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
+                  className="dashboard-profile-button"
                   title={`View ${profile.full_name || profile.username}'s profile`}
                 >
                   {profile.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={profile.full_name || profile.username}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
+                    <span className="dashboard-avatar-shell">
+                      <img
+                        src={profile.avatar_url}
+                        alt={profile.full_name || profile.username}
+                      />
+                    </span>
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                    <div className="dashboard-avatar-shell">
                       <span>👤</span>
                     </div>
                   )}
-                  <span className="text-sm font-medium text-[#e0e0e0] hidden sm:inline">
+                  <span className="dashboard-geometric text-sm font-medium hidden sm:inline">
                     {profile.full_name || profile.username}
                   </span>
                 </button>
               )}
               <button
                 onClick={onLogout}
-                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                className="dashboard-ghost-link dashboard-geometric text-sm font-medium"
               >
                 Logout
               </button>
@@ -620,139 +725,92 @@ function Dashboard({ onLogout }) {
       {/* Main Content */}
       <main className="relative z-0 max-w-7xl mx-auto px-6 md:px-12 py-8 md:py-12">
         <div className="mb-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-[#e0e0e0] mb-4">
-            {activeTab === 'today' ? "Build Today's plan" : activeTab === 'upcoming' ? 'Upcoming Tasks' : 'My Projects'}
-          </h2>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2 items-center">
-              <button
-                onClick={() => setActiveTab('projects')}
-                className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'projects'
-                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
-                  }`}
-              >
-                Projects
-              </button>
-              <button
-                onClick={() => setActiveTab('upcoming')}
-                className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'upcoming'
-                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
-                  }`}
-              >
-                Upcoming Tasks
-              </button>
-              <button
-                onClick={() => {
-                  if (hasCompletableTasks) {
-                    setActiveTab('today');
-                  }
-                }}
-                disabled={!hasCompletableTasks}
-                className={`h-11 px-4 rounded-lg text-sm leading-none font-medium transition-all inline-flex items-center justify-center whitespace-nowrap ${activeTab === 'today'
-                  ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
-                  } ${!hasCompletableTasks ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={!hasCompletableTasks ? 'No tasks available to plan. Create tasks in active projects first.' : ''}
-              >
-                Auto-Plan
-              </button>
+          <SectionHeading
+            className="mb-4"
+          >
+            {activeTab === 'today'
+              ? "Build Today's plan"
+              : activeTab === 'collaboration'
+                ? 'Import & Join'
+                : activeTab === 'upcoming'
+                  ? 'Upcoming Tasks'
+                  : 'My Projects'}
+          </SectionHeading>
+          <div className="dashboard-action-row flex items-center justify-between w-full mb-6">
+            <div className="dashboard-action-row-left flex items-center gap-2">
+              <div className="dashboard-toolbar-tabs flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('projects')}
+                  className={`dashboard-chip dashboard-row-control ${activeTab === 'projects'
+                    ? 'dashboard-chip-active'
+                    : ''
+                    }`}
+                >
+                  Projects
+                </button>
+                <button
+                  onClick={() => setActiveTab('upcoming')}
+                  className={`dashboard-chip dashboard-row-control ${activeTab === 'upcoming'
+                    ? 'dashboard-chip-active'
+                    : ''
+                    }`}
+                >
+                  Upcoming Tasks
+                </button>
+                <button
+                  onClick={() => setActiveTab('collaboration')}
+                  className={`dashboard-chip dashboard-row-control ${activeTab === 'collaboration'
+                    ? 'dashboard-chip-active'
+                    : ''
+                    }`}
+                >
+                  Import & Join
+                </button>
+                <button
+                  onClick={() => {
+                    if (hasCompletableTasks) {
+                      setActiveTab('today');
+                    }
+                  }}
+                  disabled={!hasCompletableTasks}
+                  className={`dashboard-chip dashboard-row-control ${activeTab === 'today'
+                    ? 'dashboard-chip-active'
+                    : ''
+                    } ${!hasCompletableTasks ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title={!hasCompletableTasks ? 'No tasks available to plan. Create tasks in active projects first.' : ''}
+                >
+                  Auto-Plan
+                </button>
+              </div>
             </div>
-            {activeTab === 'projects' && (
-              <>
-                <div className="h-6 w-px bg-white/10"></div>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={shareLinkInput}
-                    onChange={(e) => setShareLinkInput(e.target.value)}
-                    placeholder="Paste share link/token"
-                    className="h-11 px-3 w-52 bg-white/5 border border-white/10 rounded-lg text-sm leading-none text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                  />
-                  <button
-                    onClick={handleJoinSharedProject}
-                    disabled={joiningShareLink}
-                    className="h-11 px-4 bg-blue-500/20 border border-blue-500/30 text-sm leading-none text-blue-300 font-medium rounded-lg hover:bg-blue-500/30 transition-all inline-flex items-center justify-center whitespace-nowrap disabled:opacity-50"
-                  >
-                    {joiningShareLink ? 'Joining...' : 'Join via Link'}
-                  </button>
-                </div>
-              </>
-            )}
-            {allProjects.length > 0 && activeTab === 'projects' && (
-              <>
-                <div className="h-6 w-px bg-white/10"></div>
-                <div className="relative group">
-                  <button
-                    className="h-11 px-4 bg-white/5 border border-white/10 text-sm leading-none text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all inline-flex items-center justify-center gap-2 whitespace-nowrap"
-                    title="Export data"
-                  >
-                    📥 Export
-                  </button>
-                  <div className="absolute right-0 mt-2 w-48 bg-[#252525] border border-white/10 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                    <button
-                      onClick={() => exportAllData(allProjects, allTasks, 'csv')}
-                      className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-t-lg"
-                    >
-                      Export as CSV
-                    </button>
-                    <button
-                      onClick={() => exportAllData(allProjects, allTasks, 'json')}
-                      className="w-full text-left px-4 py-2 text-sm text-[#e0e0e0] hover:bg-white/10 rounded-b-lg"
-                    >
-                      Export as JSON
-                    </button>
-                  </div>
-                </div>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".json,.csv"
-                    onChange={handleFileInputChange}
-                    className="hidden"
-                    id="import-file-input"
-                    disabled={importing}
-                  />
-                  <label
-                    htmlFor="import-file-input"
-                    className={`h-11 px-4 bg-white/5 border border-white/10 text-sm leading-none text-[#e0e0e0] font-medium rounded-lg hover:bg-white/10 transition-all inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="Import projects from JSON or CSV"
-                  >
-                    {importing ? '⏳ Importing...' : '📤 Import'}
-                  </label>
-                </div>
-              </>
-            )}
-            <div className="h-6 w-px bg-white/10"></div>
-            <button
-              onClick={() => setShowQuickAddForm(true)}
-              className="h-11 px-5 bg-gradient-to-r from-blue-400 to-blue-500 text-sm leading-none text-[#1a1a1a] font-semibold rounded-lg hover:from-blue-300 hover:to-blue-400 transition-all inline-flex items-center justify-center whitespace-nowrap shadow-lg shadow-blue-500/20"
-            >
-              + Quick Add Task
-            </button>
-            <button
-              onClick={() => setShowForm(true)}
-              className="h-11 px-5 bg-gradient-to-r from-yellow-400 to-yellow-500 text-sm leading-none text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all inline-flex items-center justify-center whitespace-nowrap shadow-lg shadow-yellow-500/20"
-            >
-              + New Project
-            </button>
+            <div className="dashboard-action-row-right flex items-center gap-4">
+              {activeTab === 'projects' && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="dashboard-primary-button dashboard-row-control"
+                >
+                  + New Project
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {importError && (
-          <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
-            {importError}
+        {actionSuccess && (
+          <div className="dashboard-toast" role="status" aria-live="polite">
+            <div className="dashboard-toast-title">Success</div>
+            <div>{actionSuccess}</div>
           </div>
         )}
 
-        {importSuccess && (
-          <div className="mb-6 px-4 py-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400">
-            {importSuccess}
+        {actionError && (
+          <div className="dashboard-alert dashboard-alert--error mb-6">
+            {actionError}
           </div>
         )}
 
         {error && (
-          <div className="mb-6 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400">
+          <div className="dashboard-alert dashboard-alert--error mb-6">
             {error}
           </div>
         )}
@@ -771,15 +829,7 @@ function Dashboard({ onLogout }) {
           <div className="mb-8">
             <QuickAddTaskForm
               projects={activeProjectsForQuickAdd}
-              onSubmit={async (taskData) => {
-                try {
-                  await tasksAPI.create(taskData);
-                  queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
-                  setShowQuickAddForm(false);
-                } catch (err) {
-                  throw err;
-                }
-              }}
+              onSubmit={handleQuickAddTask}
               onCancel={() => setShowQuickAddForm(false)}
             />
           </div>
@@ -797,39 +847,40 @@ function Dashboard({ onLogout }) {
         ) : (
           <>
             {isFetching && projectsData && (
-              <div className="text-center py-4 text-gray-500 text-sm italic opacity-70">
+              <div className="text-center py-4 text-[#8f8779] text-sm italic opacity-70">
                 Refreshing projects...
               </div>
             )}
 
-            {/* Stats Overview */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Total Projects</div>
-                <div className="text-3xl font-bold text-[#e0e0e0]">{stats.totalProjects}</div>
-              </div>
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Active Tasks</div>
-                <div className="text-3xl font-bold text-blue-400">{stats.activeTasks}</div>
-              </div>
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Overdue Tasks</div>
-                <div className={`text-3xl font-bold ${stats.overdueTasks > 0 ? 'text-red-400' : 'text-gray-500'}`}>
-                  {stats.overdueTasks}
+            {activeTab !== 'collaboration' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="dashboard-sketch-card dashboard-stat-card">
+                  <div className="dashboard-geometric text-sm text-[#b9ae99] mb-1">Total Projects</div>
+                  <div className="dashboard-geometric text-3xl font-bold text-[#efe5cf]">{stats.totalProjects}</div>
+                </div>
+                <div className="dashboard-sketch-card dashboard-stat-card">
+                  <div className="dashboard-geometric text-sm text-[#b9ae99] mb-1">Active Tasks</div>
+                  <div className="dashboard-geometric text-3xl font-bold text-[#d4af37]">{stats.activeTasks}</div>
+                </div>
+                <div className="dashboard-sketch-card dashboard-stat-card">
+                  <div className="dashboard-geometric text-sm text-[#b9ae99] mb-1">Overdue Tasks</div>
+                  <div className={`dashboard-geometric text-3xl font-bold ${stats.overdueTasks > 0 ? 'text-red-300' : 'text-[#8f8779]'}`}>
+                    {stats.overdueTasks}
+                  </div>
+                </div>
+                <div className="dashboard-sketch-card dashboard-stat-card">
+                  <div className="dashboard-geometric text-sm text-[#b9ae99] mb-1">Completion Rate</div>
+                  <div className="dashboard-geometric text-3xl font-bold text-[#8fd6a3]">{stats.completionRate}%</div>
                 </div>
               </div>
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
-                <div className="text-sm text-gray-400 mb-1">Completion Rate</div>
-                <div className="text-3xl font-bold text-green-400">{stats.completionRate}%</div>
-              </div>
-            </div>
+            )}
 
             {activeTab === 'projects' ? (
               <>
                 {/* Search, Filter, and Sort Bar */}
-                <div className="sticky top-0 z-20 backdrop-blur-xl bg-[#1a1a1a]/80 border border-white/10 rounded-lg p-4 mb-6">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1">
+                <div className="dashboard-sketch-card dashboard-control-bar sticky top-0 z-20 mb-6">
+                  <div className="dashboard-filter-bar flex items-center gap-4 w-full bg-secondary/20 p-4 rounded-xl">
+                    <div className="dashboard-search-shell flex-1 max-w-md flex items-center">
                       <input
                         type="text"
                         placeholder="Search projects..."
@@ -838,10 +889,10 @@ function Dashboard({ onLogout }) {
                           setSearchQuery(e.target.value);
                           setCurrentPage(1);
                         }}
-                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                        className="dashboard-input dashboard-row-control dashboard-search-input w-full max-w-sm"
                       />
                     </div>
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="dashboard-filter-scroller flex items-center gap-2">
                       {[
                         { id: 'all', label: 'All' },
                         { id: 'owned', label: 'Owned by me' },
@@ -853,9 +904,9 @@ function Dashboard({ onLogout }) {
                             setFilter(f.id);
                             setCurrentPage(1);
                           }}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f.id
-                            ? 'bg-yellow-500/20 border border-yellow-500/30 text-yellow-400'
-                            : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                          className={`dashboard-chip dashboard-row-control flex items-center justify-center ${filter === f.id
+                            ? 'dashboard-chip-active'
+                            : ''
                             }`}
                         >
                           {f.label}
@@ -866,34 +917,38 @@ function Dashboard({ onLogout }) {
                           setShowArchived(!showArchived);
                           setCurrentPage(1);
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${showArchived
-                          ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
-                          : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                        className={`dashboard-chip dashboard-row-control flex items-center justify-center ${showArchived
+                          ? 'dashboard-chip-active'
+                          : ''
                           }`}
                       >
                         {showArchived ? '📦 Archived' : '📁 Active'}
                       </button>
                     </div>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => {
-                        setSortBy(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                    >
-                      <option value="updated">Last Updated</option>
-                      <option value="name">Name (A-Z)</option>
-                      <option value="created_new">Date Created (Newest)</option>
-                      <option value="created_old">Date Created (Oldest)</option>
-                      <option value="tasks">Task Count</option>
-                    </select>
+                    <div className="dashboard-sort-shell ml-auto w-fit flex items-center">
+                      <select
+                        value={sortBy}
+                        onChange={(e) => {
+                          setSortBy(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="dashboard-select dashboard-row-control dashboard-sort-select"
+                      >
+                        <option value="updated">Last Updated</option>
+                        <option value="name">Name (A-Z)</option>
+                        <option value="created_new">Date Created (Newest)</option>
+                        <option value="created_old">Date Created (Oldest)</option>
+                        <option value="tasks">Task Count</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
                 {groupedProjects.owned.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Owned by me</h3>
+                    <SectionHeading as="h3" className="mb-3">
+                      Owned by me
+                    </SectionHeading>
                     <ProjectList
                       projects={groupedProjects.owned}
                       allTasks={allTasks}
@@ -907,7 +962,9 @@ function Dashboard({ onLogout }) {
                 )}
                 {groupedProjects.sharedAdmin.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Shared with me - Admin</h3>
+                    <SectionHeading as="h3" className="mb-3">
+                      Shared with me - Admin
+                    </SectionHeading>
                     <ProjectList
                       projects={groupedProjects.sharedAdmin}
                       allTasks={allTasks}
@@ -921,7 +978,9 @@ function Dashboard({ onLogout }) {
                 )}
                 {groupedProjects.sharedEditor.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Shared with me - Editor</h3>
+                    <SectionHeading as="h3" className="mb-3">
+                      Shared with me - Editor
+                    </SectionHeading>
                     <ProjectList
                       projects={groupedProjects.sharedEditor}
                       allTasks={allTasks}
@@ -935,7 +994,9 @@ function Dashboard({ onLogout }) {
                 )}
                 {groupedProjects.sharedViewer.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-[#e0e0e0] mb-3">Shared with me - Viewer</h3>
+                    <SectionHeading as="h3" className="mb-3">
+                      Shared with me - Viewer
+                    </SectionHeading>
                     <ProjectList
                       projects={groupedProjects.sharedViewer}
                       allTasks={allTasks}
@@ -974,13 +1035,15 @@ function Dashboard({ onLogout }) {
                 )}
               </>
             ) : activeTab === 'upcoming' ? (
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
+              <div className="dashboard-sketch-card dashboard-panel p-6">
                 <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-xl font-semibold text-[#e0e0e0]">Next 5 upcoming tasks</h3>
-                  <span className="text-xs text-gray-500">Across all active projects</span>
+                  <SectionHeading as="h3">
+                    Next 5 upcoming tasks
+                  </SectionHeading>
+                  <span className="text-xs text-[#8f8779]">Across all active projects</span>
                 </div>
                 {upcomingDueSoonTasks.length === 0 ? (
-                  <p className="text-gray-400">No upcoming due tasks right now.</p>
+                  <p className="text-[#b9ae99]">No upcoming due tasks right now.</p>
                 ) : (
                   <div className="space-y-3">
                     {upcomingDueSoonTasks.map((task) => (
@@ -988,16 +1051,16 @@ function Dashboard({ onLogout }) {
                         key={task.id}
                         to={`/project/${task.project_id}`}
                         state={{ openTaskId: task.id }}
-                        className="block p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
+                        className="dashboard-sketch-card dashboard-subtle-link block p-4"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div>
-                            <div className="text-[#e0e0e0] font-medium">{task.title}</div>
-                            <div className="text-sm text-gray-400">
+                            <div className="dashboard-geometric text-[#efe5cf] font-medium">{task.title}</div>
+                            <div className="text-sm text-[#b9ae99]">
                               {projectNameById.get(task.project_id) || 'Unknown Project'}
                             </div>
                           </div>
-                          <div className="text-sm text-yellow-400">
+                          <div className="dashboard-geometric text-sm text-[#d4af37]">
                             Due {String(task.due_date).slice(0, 10)}
                           </div>
                         </div>
@@ -1006,83 +1069,175 @@ function Dashboard({ onLogout }) {
                   </div>
                 )}
               </div>
+            ) : activeTab === 'collaboration' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="dashboard-sketch-card dashboard-panel dashboard-collab-card p-6">
+                  <CollaborationCardHeading>Join a Project</CollaborationCardHeading>
+                  <p className="dashboard-collab-copy">
+                    Paste a share link or token to add a shared workspace to your dashboard.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      value={shareLinkInput}
+                      onChange={(e) => setShareLinkInput(e.target.value)}
+                      placeholder="Paste share link or token"
+                      className="dashboard-input dashboard-row-control flex-1 px-4"
+                    />
+                    <button
+                      onClick={handleJoinSharedProject}
+                      disabled={joiningShareLink}
+                      className="dashboard-primary-button dashboard-row-control flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {joiningShareLink && <span className="dashboard-spinner" aria-hidden="true" />}
+                      {joiningShareLink ? 'Processing...' : 'Join Project'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="dashboard-sketch-card dashboard-panel dashboard-collab-card p-6">
+                  <CollaborationCardHeading>Import Data</CollaborationCardHeading>
+                  <p className="dashboard-collab-copy">
+                    Drop in a JSON or CSV export, or upload a file to reuse the current import flow.
+                  </p>
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept=".json,.csv"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                    disabled={importing}
+                  />
+                  <div
+                    className={`dashboard-import-dropzone ${isDragOver ? 'dashboard-import-dropzone--active' : ''} ${importing ? 'opacity-70' : ''}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      if (!importing) {
+                        setIsDragOver(true);
+                      }
+                    }}
+                    onDragLeave={() => setIsDragOver(false)}
+                    onDrop={handleImportDrop}
+                  >
+                    <p className="dashboard-collab-copy mb-0">
+                      Drag and drop a backup file here, or use the upload button below.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleImportButtonClick}
+                      disabled={importing}
+                      className="dashboard-secondary-button dashboard-row-control flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {importing && <span className="dashboard-spinner" aria-hidden="true" />}
+                      {importing ? 'Processing...' : 'Upload File'}
+                    </button>
+                    <div className="dashboard-collab-hint">Supported formats: `.json` and `.csv`.</div>
+                  </div>
+                </div>
+
+                <div className="dashboard-sketch-card dashboard-panel dashboard-collab-card p-6 lg:col-span-2">
+                  <CollaborationCardHeading>Export Data</CollaborationCardHeading>
+                  <p className="dashboard-collab-copy">
+                    Download a full backup of every project using the existing CSV and JSON export logic.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      onClick={() => handleExportData('csv')}
+                      disabled={Boolean(exportingFormat)}
+                      className="dashboard-secondary-button dashboard-row-control flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {exportingFormat === 'csv' && <span className="dashboard-spinner" aria-hidden="true" />}
+                      {exportingFormat === 'csv' ? 'Processing...' : 'Export as CSV'}
+                    </button>
+                    <button
+                      onClick={() => handleExportData('json')}
+                      disabled={Boolean(exportingFormat)}
+                      className="dashboard-secondary-button dashboard-row-control flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {exportingFormat === 'json' && <span className="dashboard-spinner" aria-hidden="true" />}
+                      {exportingFormat === 'json' ? 'Processing...' : 'Export as JSON'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
+              <div className="dashboard-sketch-card dashboard-panel p-6">
                 <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-xl font-semibold text-[#e0e0e0]">Build Today's plan</h3>
-                  <span className="text-xs text-gray-500">Across all active projects</span>
+                  <SectionHeading as="h3">
+                    Build Today's plan
+                  </SectionHeading>
+                  <span className="text-xs text-[#8f8779]">Across all active projects</span>
                 </div>
                 {!hasCompletableTasks && (
-                  <div className="mb-4 px-4 py-3 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm">
+                  <div className="dashboard-alert mb-4 border border-[#d4af37]/20 bg-[#d4af37]/10 text-[#f0d792] text-sm">
                     No tasks available to plan. Create tasks in active projects first.
                   </div>
                 )}
-                <div className="flex flex-col md:flex-row gap-3 mb-5">
+                <div className="flex flex-col md:flex-row md:items-end gap-3 mb-5">
                   <div className="w-full md:w-72">
-                    <label className="block text-xs text-gray-400 mb-1">Daily time budget (minutes)</label>
+                    <label className="dashboard-geometric block text-xs text-[#b9ae99] mb-1">Daily time budget (minutes)</label>
                     <input
                       type="number"
                       min="1"
                       max="1440"
                       value={todayPlanTimeBudget}
                       onChange={(e) => setTodayPlanTimeBudget(e.target.value)}
-                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      className="dashboard-input dashboard-row-control px-4"
                       placeholder="120"
                     />
                   </div>
                   <button
                     onClick={() => handleGenerateTodayPlan({ save: false })}
                     disabled={todayPlanLoading || todayPlanSaving}
-                    className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                    className="dashboard-secondary-button dashboard-row-control disabled:opacity-50"
                   >
                     {todayPlanLoading ? 'Generating...' : 'Generate Preview'}
                   </button>
                   <button
                     onClick={() => handleGenerateTodayPlan({ save: true })}
                     disabled={todayPlanLoading || todayPlanSaving}
-                    className="px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 hover:bg-green-500/30 transition-all disabled:opacity-50"
+                    className="dashboard-secondary-button dashboard-row-control disabled:opacity-50"
                   >
                     {todayPlanSaving ? 'Saving...' : 'Save Today Plan'}
                   </button>
                 </div>
 
                 {todayPlanError && (
-                  <div className="mb-4 px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                  <div className="dashboard-alert dashboard-alert--error mb-4 text-sm">
                     {todayPlanError}
                   </div>
                 )}
                 {todayPlanSuccess && (
-                  <div className="mb-4 px-4 py-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                  <div className="dashboard-alert dashboard-alert--success mb-4 text-sm">
                     {todayPlanSuccess}
                   </div>
                 )}
 
                 {todayPlanPreview ? (
                   <div className="space-y-5">
-                    <div className="text-sm text-gray-400">
+                    <div className="text-sm text-[#b9ae99]">
                       Planned {todayPlanPreview.used_minutes} / {todayPlanPreview.time_budget_minutes} minutes
                     </div>
 
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-300 mb-2">Included</h4>
+                      <h4 className="dashboard-geometric text-sm font-semibold text-[#d4af37] mb-2">Included</h4>
                       <div className="space-y-2">
                         {todayPlanPreview.included_tasks.length === 0 ? (
-                          <p className="text-sm text-gray-500">No tasks included.</p>
+                          <p className="text-sm text-[#8f8779]">No tasks included.</p>
                         ) : todayPlanPreview.included_tasks.map((task) => (
-                          <div key={task.id} className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                          <div key={task.id} className="dashboard-sketch-card p-3">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                               <div>
-                                <div className="text-[#e0e0e0] font-medium">{task.title}</div>
-                                <div className="text-xs text-gray-400">
+                                <div className="dashboard-geometric text-[#efe5cf] font-medium">{task.title}</div>
+                                <div className="text-xs text-[#b9ae99]">
                                   {projectNameById.get(task.project_id) || task.project_name || 'Unknown Project'} • {task.estimated_minutes || 30} min • {getPlanReasonLabel(task.reason)}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => toggleTodayPin(task.id)}
-                                  className={`px-3 py-1 rounded text-xs border transition-all ${todayPlanPinnedTaskIds.includes(task.id)
-                                    ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
-                                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                                  className={`dashboard-chip min-h-0 px-3 py-1 text-xs ${todayPlanPinnedTaskIds.includes(task.id)
+                                    ? 'dashboard-chip-active'
+                                    : ''
                                     }`}
                                 >
                                   {todayPlanPinnedTaskIds.includes(task.id) ? 'Unpin' : 'Pin'}
@@ -1090,7 +1245,7 @@ function Dashboard({ onLogout }) {
                                 <Link
                                   to={`/project/${task.project_id}`}
                                   state={{ openTaskId: task.id }}
-                                  className="px-3 py-1 rounded text-xs bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-all"
+                                  className="dashboard-chip min-h-0 px-3 py-1 text-xs"
                                 >
                                   Open
                                 </Link>
@@ -1102,24 +1257,24 @@ function Dashboard({ onLogout }) {
                     </div>
 
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-300 mb-2">Excluded</h4>
+                      <h4 className="dashboard-geometric text-sm font-semibold text-[#d4af37] mb-2">Excluded</h4>
                       <div className="space-y-2">
                         {todayPlanPreview.excluded_tasks.length === 0 ? (
-                          <p className="text-sm text-gray-500">No excluded tasks.</p>
+                          <p className="text-sm text-[#8f8779]">No excluded tasks.</p>
                         ) : todayPlanPreview.excluded_tasks.map((task) => (
-                          <div key={task.id} className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                          <div key={task.id} className="dashboard-sketch-card p-3">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                               <div>
-                                <div className="text-[#e0e0e0] font-medium">{task.title}</div>
-                                <div className="text-xs text-gray-400">
+                                <div className="dashboard-geometric text-[#efe5cf] font-medium">{task.title}</div>
+                                <div className="text-xs text-[#b9ae99]">
                                   {projectNameById.get(task.project_id) || task.project_name || 'Unknown Project'} • {task.estimated_minutes || 30} min • {getPlanReasonLabel(task.reason)}
                                 </div>
                               </div>
                               <button
                                 onClick={() => toggleTodayPin(task.id)}
-                                className={`px-3 py-1 rounded text-xs border transition-all ${todayPlanPinnedTaskIds.includes(task.id)
-                                  ? 'bg-yellow-500/20 border-yellow-500/30 text-yellow-300'
-                                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                                className={`dashboard-chip min-h-0 px-3 py-1 text-xs ${todayPlanPinnedTaskIds.includes(task.id)
+                                  ? 'dashboard-chip-active'
+                                  : ''
                                   }`}
                               >
                                 {todayPlanPinnedTaskIds.includes(task.id) ? 'Unpin' : 'Pin'}
@@ -1131,13 +1286,13 @@ function Dashboard({ onLogout }) {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-400">Generate a preview to see your recommended plan.</p>
+                  <p className="text-[#b9ae99]">Generate a preview to see your recommended plan.</p>
                 )}
 
-                <div className="mt-6 pt-5 border-t border-white/10">
-                  <h4 className="text-sm font-semibold text-gray-300 mb-2">Saved For Today</h4>
+                <div className="mt-6 pt-5 border-t border-[#d4af37]/10">
+                  <h4 className="dashboard-geometric text-sm font-semibold text-[#d4af37] mb-2">Saved For Today</h4>
                   {todaySavedTasks.length === 0 ? (
-                    <p className="text-sm text-gray-500">No saved today plan yet.</p>
+                    <p className="text-sm text-[#8f8779]">No saved today plan yet.</p>
                   ) : (
                     <div className="space-y-2">
                       {todaySavedTasks.map((task) => (
@@ -1145,16 +1300,16 @@ function Dashboard({ onLogout }) {
                           key={task.id}
                           to={`/project/${task.project_id}`}
                           state={{ openTaskId: task.id }}
-                          className="block p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
+                          className="dashboard-sketch-card dashboard-subtle-link block p-3"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <div className="text-[#e0e0e0] font-medium">{task.title}</div>
-                              <div className="text-xs text-gray-400">
+                              <div className="dashboard-geometric text-[#efe5cf] font-medium">{task.title}</div>
+                              <div className="text-xs text-[#b9ae99]">
                                 {projectNameById.get(task.project_id) || task.project_name || 'Unknown Project'}
                               </div>
                             </div>
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-[#b9ae99]">
                               {task.estimated_minutes || 30} min{task.plan_pinned ? ' • pinned' : ''}
                             </span>
                           </div>
@@ -1166,14 +1321,6 @@ function Dashboard({ onLogout }) {
               </div>
             )}
           </>
-        )}
-
-        {showQuickAddForm && (
-          <QuickAddTaskForm
-            projects={activeProjectsForQuickAdd}
-            onSubmit={handleQuickAddTask}
-            onCancel={() => setShowQuickAddForm(false)}
-          />
         )}
 
         <ConfirmDialog

@@ -15,7 +15,7 @@ export function SkeletonBox({ className = '', width, height }) {
 
 export function ProjectCardSkeleton() {
   return (
-    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
+    <div className="dashboard-sketch-card dashboard-panel relative p-6">
       <div className="flex justify-between items-start gap-4 mb-4">
         <div className="flex-1 min-w-0">
           <SkeletonBox height="1.5rem" width="60%" className="mb-2" />
@@ -69,7 +69,7 @@ export function StatsSkeleton() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-4">
+        <div key={i} className="dashboard-sketch-card dashboard-stat-card">
           <SkeletonBox height="1rem" width="60%" className="mb-2" />
           <SkeletonBox height="2rem" width="40%" />
         </div>

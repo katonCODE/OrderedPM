@@ -7,6 +7,24 @@ import SubtaskList from './SubtaskList';
 import ActivityFeed from './ActivityFeed';
 import TaskComments from './TaskComments';
 
+const SketchUnderline = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 240 18"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+    className={className}
+  >
+    <path
+      d="M4 10c36 6 67 2 101 0 42-3 79-5 131-1"
+      stroke="#D4AF37"
+      strokeWidth="6"
+      strokeLinecap="round"
+      fill="none"
+      opacity="0.68"
+    />
+  </svg>
+);
+
 function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, canDeleteTasks = true }) {
   const queryClient = useQueryClient();
   const [selectedBlockerId, setSelectedBlockerId] = useState('');
@@ -245,18 +263,32 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
     return interval > 1 ? `Every ${interval} ${unit}` : `Every ${unit}`;
   };
 
+  const inputClass = 'w-full rounded-[13px_11px_12px_14px] border border-[rgba(222,209,175,0.14)] bg-white/[0.04] px-3 py-2 text-sm text-[#f2e8d5] placeholder:text-[#8f8779] focus:outline-none focus:ring-2 focus:ring-[#d4af37]/20 focus:border-[rgba(212,175,55,0.45)]';
+  const secondaryButtonClass = 'inline-flex h-10 items-center justify-center rounded-[12px_9px_11px_13px] border border-[rgba(222,209,175,0.14)] bg-white/[0.03] px-4 text-sm font-semibold text-[#ebe1cf] transition-all hover:border-[rgba(212,175,55,0.2)] hover:bg-white/[0.05] hover:text-[#f3e4b8] disabled:opacity-50';
+  const primaryButtonClass = 'inline-flex h-10 items-center justify-center rounded-lg border border-[rgba(255,237,183,0.2)] bg-[#ecc94b] px-4 text-sm font-semibold text-[#161616] shadow-[0_10px_24px_rgba(212,175,55,0.2)] transition-all hover:bg-[#f0cf58] disabled:opacity-50';
+  const subtleCardClass = 'rounded-[16px_13px_17px_14px] border border-[rgba(214,190,119,0.14)] bg-white/[0.03] p-3';
+
   const modalContent = (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" style={{ zIndex: 99999 }}>
+    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-sm" style={{ zIndex: 99999 }}>
       <div className="relative w-full max-w-2xl my-auto">
-        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl blur opacity-50"></div>
+        <div className="relative max-h-[90vh] overflow-y-auto rounded-[24px] border border-[rgba(214,190,119,0.14)] bg-[#151515] p-6 text-[#efe5cf] shadow-2xl md:p-8">
+          <div className="pointer-events-none absolute inset-0 opacity-35" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.055) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(212,175,55,0.13),transparent_24%),radial-gradient(circle_at_84%_18%,rgba(212,175,55,0.06),transparent_20%),linear-gradient(180deg,rgba(21,21,21,0.97)_0%,rgba(19,19,19,0.99)_100%)]" />
+          <div className="pointer-events-none absolute inset-[3px_2px_2px_3px] rounded-[22px] border border-[rgba(255,245,214,0.05)]" />
 
           <div className="relative">
-            <div className="flex justify-between items-start mb-6">
-              <h2 className="text-2xl font-bold text-[#e0e0e0]">{currentTask.title}</h2>
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="relative inline-block pb-3">
+                  <h2 className="font-['Figtree_Variable','Inter','Plus_Jakarta_Sans',sans-serif] text-2xl font-bold tracking-[-0.04em] text-[#d4af37] md:text-3xl">
+                    {currentTask.title}
+                  </h2>
+                  <SketchUnderline className="absolute bottom-0 left-0 h-3 w-full" />
+                </div>
+              </div>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-white/10 rounded-lg transition-all text-gray-400 hover:text-[#e0e0e0]"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-[12px_9px_11px_13px] border border-[rgba(222,209,175,0.14)] bg-white/[0.03] text-[#b9ae99] transition-all hover:border-[rgba(212,175,55,0.2)] hover:bg-white/[0.05] hover:text-[#f3e4b8]"
                 title="Close"
               >
                 ✕
@@ -266,69 +298,69 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
             <div className="space-y-6">
               {currentTask.description && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Description</h3>
-                  <p className="text-[#e0e0e0] leading-relaxed whitespace-pre-wrap">{currentTask.description}</p>
+                  <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Description</h3>
+                  <p className="whitespace-pre-wrap leading-relaxed text-[#efe5cf]">{currentTask.description}</p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Status</h3>
-                  <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium border ${getStatusColor(currentTask.status)}`}>
+                  <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Status</h3>
+                  <span className={`inline-block rounded-[13px_10px_12px_14px] border px-3 py-1 text-sm font-medium ${getStatusColor(currentTask.status)}`}>
                     {currentTask.status === 'done' ? 'Done' : currentTask.status === 'in_progress' ? 'In Progress' : 'To Do'}
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Priority</h3>
-                  <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium border ${getPriorityColor(currentTask.priority)}`}>
+                  <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Priority</h3>
+                  <span className={`inline-block rounded-[13px_10px_12px_14px] border px-3 py-1 text-sm font-medium ${getPriorityColor(currentTask.priority)}`}>
                     {formatPriority(currentTask.priority)}
                   </span>
                 </div>
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Estimated Effort</h3>
-                <p className="text-[#e0e0e0]">
+                <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Estimated Effort</h3>
+                <p className="text-[#efe5cf]">
                   {currentTask.estimated_minutes ? `${currentTask.estimated_minutes} minutes` : 'Not set'}
                 </p>
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Focus Session</h3>
+                <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Focus Session</h3>
                 {!canManageTasks && (
-                  <p className="text-xs text-gray-500 mb-3">Read-only access.</p>
+                  <p className="mb-3 text-xs text-[#8f8779]">Read-only access.</p>
                 )}
                 {focusError && (
-                  <p className="text-xs text-red-400 mb-3">{focusError}</p>
+                  <p className="mb-3 text-xs text-red-300">{focusError}</p>
                 )}
                 {canManageTasks && activeFocusOnAnotherTask && (
-                  <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm text-yellow-300">
+                  <div className="mb-3 rounded-[16px_13px_17px_14px] border border-[#d4af37]/25 bg-[#d4af37]/10 p-3 text-sm text-[#f0d792]">
                     You already have an active focus session on another task.
                   </div>
                 )}
                 {canManageTasks && isActiveFocusOnCurrentTask ? (
                   <div className="space-y-3">
-                    <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                      <p className="text-xs text-gray-400 mb-1">Time Remaining</p>
-                      <p className="text-2xl font-bold text-blue-300">{formatTimer(remainingSeconds)}</p>
+                    <div className={`${subtleCardClass} border-[#d4af37]/20 bg-[#d4af37]/10`}>
+                      <p className="mb-1 text-xs text-[#8f8779]">Time Remaining</p>
+                      <p className="text-2xl font-bold text-[#f0d792]">{formatTimer(remainingSeconds)}</p>
                       {remainingSeconds === 0 && (
-                        <p className="text-xs text-yellow-300 mt-1">Session timer finished. End session to log outcome.</p>
+                        <p className="mt-1 text-xs text-[#f0d792]">Session timer finished. End session to log outcome.</p>
                       )}
                     </div>
                     <button
                       onClick={() => setShowEndFocusForm(!showEndFocusForm)}
-                      className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all"
+                      className={secondaryButtonClass}
                     >
                       {showEndFocusForm ? 'Cancel End Session' : 'End Session'}
                     </button>
                     {showEndFocusForm && (
-                      <div className="space-y-3 p-3 bg-white/5 border border-white/10 rounded-lg">
+                      <div className={`${subtleCardClass} space-y-3`}>
                         <div>
-                          <label className="block text-xs text-gray-400 mb-1">Outcome</label>
+                          <label className="mb-1 block text-xs text-[#8f8779]">Outcome</label>
                           <select
                             value={focusOutcome}
                             onChange={(e) => setFocusOutcome(e.target.value)}
-                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                            className={inputClass}
                           >
                             <option value="completed">Completed</option>
                             <option value="progress">Made progress</option>
@@ -337,17 +369,17 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs text-gray-400 mb-1">Notes (optional)</label>
+                          <label className="mb-1 block text-xs text-[#8f8779]">Notes (optional)</label>
                           <textarea
                             value={focusNote}
                             onChange={(e) => setFocusNote(e.target.value)}
                             rows={2}
-                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
+                            className={`${inputClass} resize-none`}
                             placeholder="Quick session notes"
                           />
                         </div>
                         {focusOutcome === 'completed' && (
-                          <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <label className="flex items-center gap-2 text-sm text-[#d1c5af]">
                             <input
                               type="checkbox"
                               checked={markDoneOnComplete}
@@ -360,7 +392,7 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                         <button
                           onClick={() => endFocusMutation.mutate()}
                           disabled={endFocusMutation.isPending}
-                          className="px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-sm text-green-300 hover:bg-green-500/30 transition-all disabled:opacity-50"
+                          className={primaryButtonClass}
                         >
                           {endFocusMutation.isPending ? 'Ending...' : 'Save Session'}
                         </button>
@@ -371,39 +403,35 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                   <div className="space-y-3">
                     <div className="flex items-end gap-3">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Duration (minutes)</label>
+                        <label className="mb-1 block text-xs text-[#8f8779]">Duration (minutes)</label>
                         <input
                           type="number"
                           min={1}
                           max={240}
                           value={focusDurationMinutes}
                           onChange={(e) => setFocusDurationMinutes(e.target.value)}
-                          className="w-28 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          className={`${inputClass} w-28`}
                         />
                       </div>
                       <button
                         onClick={() => startFocusMutation.mutate()}
                         disabled={startFocusMutation.isPending || activeFocusOnAnotherTask}
-                        className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-sm text-blue-300 hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        className={secondaryButtonClass}
                       >
                         {startFocusMutation.isPending ? 'Starting...' : 'Start Focus'}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500">Pick one task, start a timer, and log outcome when done.</p>
+                    <p className="text-xs text-[#8f8779]">Pick one task, start a timer, and log outcome when done.</p>
                   </div>
                 ) : null}
                 {focusSessions.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs text-gray-400 mb-2">Recent Sessions</p>
+                    <p className="mb-2 text-xs text-[#8f8779]">Recent Sessions</p>
                     <div className="space-y-2">
                       {focusSessions.slice(0, 3).map((session) => (
-                        <div key={session.id} className="p-2 bg-white/5 border border-white/10 rounded-lg text-xs text-gray-300 flex justify-between items-center gap-2">
-                          <span>
-                            {new Date(session.started_at).toLocaleString()}
-                          </span>
-                          <span>
-                            {session.actual_minutes || session.planned_minutes} min - {session.outcome || 'in progress'}
-                          </span>
+                        <div key={session.id} className={`${subtleCardClass} flex items-center justify-between gap-2 text-xs text-[#d1c5af]`}>
+                          <span>{new Date(session.started_at).toLocaleString()}</span>
+                          <span>{session.actual_minutes || session.planned_minutes} min - {session.outcome || 'in progress'}</span>
                         </div>
                       ))}
                     </div>
@@ -412,25 +440,25 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Dependencies</h3>
+                <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Dependencies</h3>
                 {dependencyError && (
-                  <p className="text-xs text-red-400 mb-3">{dependencyError}</p>
+                  <p className="mb-3 text-xs text-red-300">{dependencyError}</p>
                 )}
                 <div className="space-y-4">
                   <div>
-                    <p className="text-xs text-gray-400 mb-2">Blocked by</p>
+                    <p className="mb-2 text-xs text-[#8f8779]">Blocked by</p>
                     {blockedBy.length === 0 ? (
-                      <p className="text-sm text-gray-500">No blockers</p>
+                      <p className="text-sm text-[#8f8779]">No blockers</p>
                     ) : (
                       <div className="space-y-2">
                         {blockedBy.map((dep) => (
-                          <div key={dep.id} className="flex items-center justify-between gap-3 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                            <span className="text-sm text-[#e0e0e0]">{dep.title}</span>
+                          <div key={dep.id} className="flex items-center justify-between gap-3 rounded-[13px_11px_12px_14px] border border-[#d4af37]/18 bg-[#d4af37]/10 p-2.5">
+                            <span className="text-sm text-[#efe5cf]">{dep.title}</span>
                             {canManageTasks && (
                               <button
                                 onClick={() => removeDependencyMutation.mutate(dep.id)}
                                 disabled={removeDependencyMutation.isPending}
-                                className="px-2 py-1 text-xs text-orange-300 border border-orange-500/30 rounded hover:bg-orange-500/20 transition-all disabled:opacity-50"
+                                className="rounded-[11px_9px_10px_12px] border border-[#d4af37]/25 px-2.5 py-1 text-xs text-[#f0d792] transition-all hover:bg-[#d4af37]/10 disabled:opacity-50"
                                 title="Remove blocker"
                               >
                                 Remove
@@ -441,11 +469,11 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                       </div>
                     )}
                     {canManageTasks && availableBlockers.length > 0 && (
-                      <div className="flex gap-2 mt-3">
+                      <div className="mt-3 flex gap-2">
                         <select
                           value={selectedBlockerId}
                           onChange={(e) => setSelectedBlockerId(e.target.value)}
-                          className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-[#e0e0e0] focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                          className={`${inputClass} flex-1`}
                         >
                           <option value="">Select blocker task</option>
                           {availableBlockers.map((candidate) => (
@@ -457,7 +485,7 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                         <button
                           onClick={() => selectedBlockerId && addDependencyMutation.mutate(selectedBlockerId)}
                           disabled={!selectedBlockerId || addDependencyMutation.isPending}
-                          className="px-3 py-2 bg-orange-500/20 border border-orange-500/30 rounded-lg text-sm text-orange-300 hover:bg-orange-500/30 transition-all disabled:opacity-50"
+                          className={secondaryButtonClass}
                         >
                           Add
                         </button>
@@ -466,14 +494,14 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                   </div>
 
                   <div>
-                    <p className="text-xs text-gray-400 mb-2">Blocking</p>
+                    <p className="mb-2 text-xs text-[#8f8779]">Blocking</p>
                     {blocking.length === 0 ? (
-                      <p className="text-sm text-gray-500">Not blocking any tasks</p>
+                      <p className="text-sm text-[#8f8779]">Not blocking any tasks</p>
                     ) : (
                       <div className="space-y-2">
                         {blocking.map((dep) => (
-                          <div key={dep.id} className="p-2 bg-gray-500/10 border border-gray-500/20 rounded-lg">
-                            <span className="text-sm text-[#e0e0e0]">{dep.title}</span>
+                          <div key={dep.id} className="rounded-[13px_11px_12px_14px] border border-white/10 bg-white/[0.04] p-2.5">
+                            <span className="text-sm text-[#efe5cf]">{dep.title}</span>
                           </div>
                         ))}
                       </div>
@@ -484,10 +512,10 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
 
               {currentTask.recurrence_type && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Recurrence</h3>
-                  <p className="text-[#e0e0e0]">{formatRecurrence(currentTask)}</p>
+                  <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Recurrence</h3>
+                  <p className="text-[#efe5cf]">{formatRecurrence(currentTask)}</p>
                   {currentTask.recurrence_end_date && (
-                    <p className="text-sm text-gray-400 mt-1">
+                    <p className="mt-1 text-sm text-[#b9ae99]">
                       Ends on {formatDate(currentTask.recurrence_end_date)}
                     </p>
                   )}
@@ -498,34 +526,34 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                 <div className="grid grid-cols-2 gap-4">
                   {currentTask.start_date && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400 mb-2">Start Date</h3>
-                      <p className="text-[#e0e0e0]">{formatDate(currentTask.start_date)}</p>
+                      <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Start Date</h3>
+                      <p className="text-[#efe5cf]">{formatDate(currentTask.start_date)}</p>
                     </div>
                   )}
                   {currentTask.due_date && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400 mb-2">Due Date</h3>
-                      <p className="text-[#e0e0e0]">{formatDate(currentTask.due_date)}</p>
+                      <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Due Date</h3>
+                      <p className="text-[#efe5cf]">{formatDate(currentTask.due_date)}</p>
                     </div>
                   )}
                 </div>
               )}
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Created by</h3>
+                <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Created by</h3>
                 <div className="flex items-center gap-3">
                   {currentTask.creator_avatar_url ? (
                     <img
                       src={currentTask.creator_avatar_url}
                       alt={getCreatorName(currentTask)}
-                      className="w-8 h-8 rounded-full object-cover border border-white/20"
+                      className="h-8 w-8 rounded-full border border-[rgba(222,209,175,0.14)] object-cover"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 text-xs text-gray-300 flex items-center justify-center font-semibold">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(222,209,175,0.14)] bg-white/[0.04] text-xs font-semibold text-[#d1c5af]">
                       {getCreatorInitials(currentTask)}
                     </div>
                   )}
-                  <div className="text-[#e0e0e0]">
+                  <div className="text-[#efe5cf]">
                     {getCreatorName(currentTask)}
                   </div>
                 </div>
@@ -533,12 +561,12 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
 
               {currentTask.tags && Array.isArray(currentTask.tags) && currentTask.tags.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-400 mb-2">Tags</h3>
+                  <h3 className="mb-2 text-sm font-semibold text-[#d4af37]">Tags</h3>
                   <div className="flex flex-wrap gap-2">
                     {currentTask.tags.map((tag, index) => (
                       <span
                         key={index}
-                        className="inline-block px-3 py-1 bg-blue-500/20 border border-blue-500/30 rounded-full text-sm text-blue-300"
+                        className="inline-flex rounded-[13px_10px_12px_14px] border border-[#d4af37]/18 bg-[#d4af37]/10 px-3 py-1 text-sm text-[#f0d792]"
                       >
                         {tag}
                       </span>
@@ -547,7 +575,7 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                 </div>
               )}
 
-              <div className="pt-4 border-t border-white/10">
+              <div className="border-t border-[#d4af37]/10 pt-4">
                 <SubtaskList
                   task={currentTask}
                   subtasks={currentTask.subtasks || []}
@@ -561,18 +589,18 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                 />
               </div>
 
-              <div className="pt-4 border-t border-white/10">
+              <div className="border-t border-[#d4af37]/10 pt-4">
                 <ActivityFeed taskId={currentTask.id} />
               </div>
 
-              <div className="pt-4 border-t border-white/10">
+              <div className="border-t border-[#d4af37]/10 pt-4">
                 <TaskComments taskId={currentTask.id} canManageTasks={canManageTasks} />
               </div>
 
-              <div className="flex gap-4 justify-end pt-4 border-t border-white/10">
+              <div className="flex justify-end gap-4 border-t border-[#d4af37]/10 pt-4">
                 <button
                   onClick={onClose}
-                  className="px-6 py-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all text-[#e0e0e0] font-medium"
+                  className={secondaryButtonClass}
                 >
                   Close
                 </button>
@@ -582,7 +610,7 @@ function TaskView({ task, onEdit, onClose, onTaskUpdate, canManageTasks = true, 
                       onEdit(currentTask);
                       onClose();
                     }}
-                    className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-yellow-500 text-[#1a1a1a] font-semibold rounded-lg hover:from-yellow-300 hover:to-yellow-400 transition-all shadow-lg shadow-yellow-500/20"
+                    className={primaryButtonClass}
                   >
                     Edit Task
                   </button>

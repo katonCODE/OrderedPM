@@ -39,34 +39,34 @@ function Timeline({ tasks, onTaskClick }) {
 
   if (upcomingTasks.length === 0) {
     return (
-      <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col min-h-[300px] max-h-[500px]">
-        <h3 className="text-lg font-semibold text-[#e0e0e0] mb-4">Upcoming</h3>
-        <div className="text-center text-gray-500 text-sm py-8 flex-1 flex items-center justify-center">No upcoming tasks</div>
+      <div className="dashboard-sketch-card dashboard-panel relative flex min-h-[300px] flex-col overflow-x-hidden rounded-[18px] p-4">
+        <h3 className="dashboard-geometric mb-4 text-lg font-semibold text-[#d4af37]">Upcoming</h3>
+        <div className="flex flex-1 items-center justify-center py-8 text-center text-sm text-[#8f8779]">No upcoming tasks</div>
       </div>
     );
   }
 
   return (
-    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col min-h-[300px] max-h-[500px]">
-      <h3 className="text-lg font-semibold text-[#e0e0e0] mb-4">Upcoming</h3>
-      <div className="flex flex-col gap-3 overflow-y-auto flex-1">
+    <div className="dashboard-sketch-card dashboard-panel relative flex min-h-[300px] flex-col overflow-x-hidden rounded-[18px] p-4">
+      <h3 className="dashboard-geometric mb-4 text-lg font-semibold text-[#d4af37]">Upcoming</h3>
+      <div className="flex flex-1 flex-col gap-3">
         {upcomingTasks.map((task) => (
           <div
             key={task.id}
-            className="flex gap-3 p-3 bg-white/5 border-l-2 border-blue-500 rounded-lg cursor-pointer hover:bg-white/10 hover:translate-x-1 transition-all"
+            className="flex cursor-pointer gap-3 rounded-[14px] border border-[#d4af37]/10 border-l-2 border-l-[#d4af37] bg-white/[0.03] p-3 transition-all hover:bg-white/[0.05] hover:translate-x-1"
             onClick={() => onTaskClick && onTaskClick(task)}
           >
-            <div className="text-xs text-gray-400 font-medium whitespace-nowrap pt-0.5">
+            <div className="whitespace-nowrap pt-0.5 text-xs font-medium text-[#8f8779]">
               {formatTime(task.due_date)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-[#e0e0e0] mb-1 truncate">{task.title}</div>
+              <div className="mb-1 truncate text-sm font-medium text-[#efe5cf]">{task.title}</div>
               <div>
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${task.priority === 'high'
-                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    ? 'border border-red-400/20 bg-red-500/10 text-red-300'
                     : task.priority === 'medium'
-                      ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                      : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      ? 'border border-[#d4af37]/20 bg-[#d4af37]/10 text-[#f0d792]'
+                      : 'border border-slate-400/20 bg-slate-500/10 text-slate-300'
                   }`}>
                   {formatPriority(task.priority)}
                 </span>
